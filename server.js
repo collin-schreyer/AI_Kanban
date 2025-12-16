@@ -1,0 +1,472 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const Database = require('better-sqlite3');
+const OpenAI = require('openai');
+const path = require('path');
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(express.static('.'));
+
+// Initialize SQLite database
+const db = new Database('kanban.db');
+
+// Initialize OpenAI
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// Create tables
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    last_login TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    owner TEXT NOT NULL,
+    status TEXT DEFAULT 'todo',
+    priority TEXT DEFAULT 'medium',
+    due_date TEXT,
+    tags TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    author TEXT NOT NULL,
+    text TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    user TEXT NOT NULL,
+    action TEXT NOT NULL,
+    details TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS activity_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+// Seed initial users if not exist
+const seedUsers = [
+  { username: 'carl', password: 'carl2024!', display_name: 'Carl' },
+  { username: 'ann', password: 'ann2024!', display_name: 'Ann' },
+  { username: 'tom', password: 'tom2024!', display_name: 'Tom' },
+  { username: 'collin', password: 'collin2024!', display_name: 'Collin' }
+];
+
+const insertUser = db.prepare('INSERT OR IGNORE INTO users (username, password, display_name) VALUES (?, ?, ?)');
+seedUsers.forEach(u => insertUser.run(u.username, u.password, u.display_name));
+
+// Seed initial projects if empty
+const projectCount = db.prepare('SELECT COUNT(*) as count FROM projects').get();
+if (projectCount.count === 0) {
+  const initialProjects = [
+    { name: "FPI", description: "FPI AI Project - Federal Process Innovation initiative leveraging AI for government efficiency", owner: "Tom" },
+    { name: "SRT", description: "SRT AI Project - Speech Recognition Technology for automated transcription services", owner: "Ann" },
+    { name: "DOS AI Tools", description: "Department of State AI Tools - Suite of AI-powered tools for diplomatic communications", owner: "Ann" },
+    { name: "AI-Call Center", description: "AI Call Center - Intelligent call routing and automated customer service system", owner: "Carl" },
+    { name: "HR Intelligence", description: "HR Intelligence - AI-driven human resources analytics and talent management", owner: "Carl" },
+    { name: "GSA General AI Work", description: "GSA's general AI work - General Services Administration AI modernization efforts", owner: "Tom" },
+    { name: "NASA AI", description: "NASA AI Project - Space exploration data analysis and mission planning AI", owner: "Carl" },
+    { name: "VA AI", description: "VA AI Project - Veterans Affairs healthcare and benefits processing automation", owner: "Carl" },
+    { name: "DHA Proposal", description: "DHA Proposal - Defense Health Agency AI implementation proposal", owner: "Carl" },
+    { name: "Legal AI", description: "Legal AI Project - AI-assisted legal document review and compliance checking", owner: "Carl" }
+  ];
+  
+  const insertProject = db.prepare('INSERT INTO projects (name, description, owner, tags) VALUES (?, ?, ?, ?)');
+  initialProjects.forEach(p => insertProject.run(p.name, p.description, p.owner, '[]'));
+}
+
+
+// AUTH ROUTES
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  const user = db.prepare('SELECT * FROM users WHERE username = ? AND password = ?').get(username.toLowerCase(), password);
+  
+  if (user) {
+    const lastLogin = user.last_login;
+    db.prepare('UPDATE users SET last_login = ? WHERE id = ?').run(new Date().toISOString(), user.id);
+    res.json({ success: true, user: { displayName: user.display_name, lastLogin } });
+  } else {
+    res.status(401).json({ success: false, message: 'Invalid credentials' });
+  }
+});
+
+// PROJECT ROUTES
+app.get('/api/projects', (req, res) => {
+  const projects = db.prepare('SELECT * FROM projects ORDER BY created_at DESC').all();
+  projects.forEach(p => p.tags = JSON.parse(p.tags || '[]'));
+  res.json(projects);
+});
+
+app.post('/api/projects', (req, res) => {
+  const { name, description, owner, priority, dueDate, tags, user } = req.body;
+  const result = db.prepare(
+    'INSERT INTO projects (name, description, owner, priority, due_date, tags) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(name, description, owner, priority || 'medium', dueDate || null, JSON.stringify(tags || []));
+  
+  db.prepare('INSERT INTO history (project_id, user, action, details) VALUES (?, ?, ?, ?)').run(
+    result.lastInsertRowid, user, 'created', `Project "${name}" created`
+  );
+  db.prepare('INSERT INTO activity_log (user, message) VALUES (?, ?)').run(user, `Created project "${name}"`);
+  
+  res.json({ success: true, id: result.lastInsertRowid });
+});
+
+app.put('/api/projects/:id', (req, res) => {
+  const { id } = req.params;
+  const { name, description, owner, status, priority, dueDate, tags, user } = req.body;
+  
+  const oldProject = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
+  
+  db.prepare(
+    'UPDATE projects SET name=?, description=?, owner=?, status=?, priority=?, due_date=?, tags=?, updated_at=? WHERE id=?'
+  ).run(name, description, owner, status, priority, dueDate || null, JSON.stringify(tags || []), new Date().toISOString(), id);
+  
+  // Track status changes
+  if (oldProject && oldProject.status !== status) {
+    db.prepare('INSERT INTO history (project_id, user, action, details) VALUES (?, ?, ?, ?)').run(
+      id, user, 'status_change', `Moved from "${oldProject.status}" to "${status}"`
+    );
+    db.prepare('INSERT INTO activity_log (user, message) VALUES (?, ?)').run(
+      user, `Moved "${name}" from ${oldProject.status} to ${status}`
+    );
+  } else {
+    db.prepare('INSERT INTO history (project_id, user, action, details) VALUES (?, ?, ?, ?)').run(
+      id, user, 'updated', `Project updated`
+    );
+  }
+  
+  res.json({ success: true });
+});
+
+app.delete('/api/projects/:id', (req, res) => {
+  const { id } = req.params;
+  const { user } = req.body;
+  const project = db.prepare('SELECT name FROM projects WHERE id = ?').get(id);
+  
+  db.prepare('DELETE FROM projects WHERE id = ?').run(id);
+  db.prepare('INSERT INTO activity_log (user, message) VALUES (?, ?)').run(user, `Deleted project "${project?.name}"`);
+  
+  res.json({ success: true });
+});
+
+// COMMENTS ROUTES
+app.get('/api/projects/:id/comments', (req, res) => {
+  const comments = db.prepare('SELECT * FROM comments WHERE project_id = ? ORDER BY created_at DESC').all(req.params.id);
+  res.json(comments);
+});
+
+app.post('/api/projects/:id/comments', (req, res) => {
+  const { id } = req.params;
+  const { author, text } = req.body;
+  
+  const result = db.prepare('INSERT INTO comments (project_id, author, text) VALUES (?, ?, ?)').run(id, author, text);
+  
+  const project = db.prepare('SELECT name FROM projects WHERE id = ?').get(id);
+  db.prepare('INSERT INTO history (project_id, user, action, details) VALUES (?, ?, ?, ?)').run(
+    id, author, 'comment', `Added comment`
+  );
+  db.prepare('INSERT INTO activity_log (user, message) VALUES (?, ?)').run(author, `Commented on "${project?.name}"`);
+  
+  res.json({ success: true, id: result.lastInsertRowid });
+});
+
+// HISTORY ROUTES
+app.get('/api/projects/:id/history', (req, res) => {
+  const history = db.prepare('SELECT * FROM history WHERE project_id = ? ORDER BY created_at DESC').all(req.params.id);
+  res.json(history);
+});
+
+// ACTIVITY LOG
+app.get('/api/activity', (req, res) => {
+  const activity = db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT 50').all();
+  res.json(activity);
+});
+
+app.post('/api/activity', (req, res) => {
+  const { user, message } = req.body;
+  db.prepare('INSERT INTO activity_log (user, message) VALUES (?, ?)').run(user, message);
+  res.json({ success: true });
+});
+
+// COLLIN'S SCHEDULE - AI Generated
+app.get('/api/schedule', async (req, res) => {
+  const projects = db.prepare("SELECT * FROM projects WHERE status != 'done'").all();
+  const recentActivity = db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT 30').all();
+  const allComments = db.prepare('SELECT c.*, p.name as project_name FROM comments c JOIN projects p ON c.project_id = p.id ORDER BY c.created_at DESC LIMIT 50').all();
+  
+  const systemPrompt = `You are an AI assistant helping prioritize work for Collin, who is the BUILDER/DEVELOPER for all AI projects on this Kanban board.
+
+IMPORTANT CONTEXT:
+- Collin builds and implements ALL the projects on this board
+- Carl, Ann, and Tom are project OWNERS who request work and provide direction
+- Collin needs to know what to work on and in what order
+- Consider owner urgency, project priority, deadlines, and recent activity/comments
+
+Current Projects (not done):
+${projects.map(p => `- ${p.name} (Owner: ${p.owner}, Status: ${p.status}, Priority: ${p.priority}, Due: ${p.due_date || 'none'}): ${p.description}`).join('\n')}
+
+Recent Activity:
+${recentActivity.slice(0, 15).map(a => `- ${a.user}: ${a.message}`).join('\n')}
+
+Recent Comments (may indicate urgency):
+${allComments.slice(0, 10).map(c => `- ${c.author} on ${c.project_name}: "${c.text.substring(0, 100)}"`).join('\n')}
+
+Generate a JSON response with Collin's prioritized schedule. Return ONLY valid JSON, no markdown:
+{
+  "summary": "Brief 2-3 sentence overview of what Collin should focus on today/this week",
+  "urgent": [
+    {
+      "id": project_id,
+      "name": "project name",
+      "owner": "owner name", 
+      "priority": "high/medium/low",
+      "description": "brief description",
+      "reason": "Why this is urgent - be specific about owner needs or deadlines"
+    }
+  ],
+  "thisWeek": [same structure - things to tackle this week],
+  "upcoming": [same structure - can wait but should be planned],
+  "backlog": [same structure - lower priority items]
+}
+
+Be strategic. Consider:
+1. High priority items from any owner
+2. Items with approaching due dates
+3. Items with recent comments (owners may be waiting)
+4. Items that have been "in progress" too long
+5. Balance work across different owners when possible`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: 'Generate Collin\'s prioritized work schedule as JSON' }
+      ],
+      max_tokens: 1500
+    });
+    
+    const content = completion.choices[0].message.content;
+    // Try to parse JSON, handle potential markdown wrapping
+    let schedule;
+    try {
+      schedule = JSON.parse(content.replace(/```json\n?|\n?```/g, '').trim());
+    } catch (e) {
+      schedule = { summary: "Unable to parse schedule. Please refresh.", urgent: [], thisWeek: [], upcoming: [], backlog: [] };
+    }
+    
+    res.json({ schedule, generatedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error('OpenAI error:', error);
+    res.status(500).json({ error: 'AI service unavailable' });
+  }
+});
+
+// AI ASSISTANT ROUTE
+app.post('/api/ai/chat', async (req, res) => {
+  const { message, user } = req.body;
+  
+  // Get all kanban data for context
+  const projects = db.prepare('SELECT * FROM projects').all();
+  const recentActivity = db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT 20').all();
+  
+  const systemPrompt = `You are an AI assistant for the AI Projects Kanban board. You help users understand project status, provide updates, and answer questions about the projects.
+
+IMPORTANT CONTEXT:
+- Collin is the BUILDER/DEVELOPER who implements ALL projects
+- Carl, Ann, and Tom are project OWNERS who request and oversee work
+- This board helps everyone track what Collin is working on and what's coming up
+
+Current Projects:
+${projects.map(p => `- ${p.name} (Owner: ${p.owner}, Status: ${p.status}, Priority: ${p.priority}): ${p.description}`).join('\n')}
+
+Recent Activity:
+${recentActivity.map(a => `- ${a.user}: ${a.message} (${a.created_at})`).join('\n')}
+
+Current user: ${user}
+
+FORMATTING RULES:
+- Use clean HTML formatting for responses
+- For lists, use <ul> and <li> tags
+- For project names, wrap in <strong> tags
+- Use <span class="ai-tag owner">Name</span> for owner names
+- Use <span class="ai-tag status">Status</span> for statuses
+- Use <span class="ai-tag priority-high/medium/low">Priority</span> for priorities
+- Keep responses concise but well-organized
+- Use <br> for line breaks, not \\n
+
+Be helpful, concise, and friendly. Format information in an easy-to-scan way.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: message }
+      ],
+      max_tokens: 800
+    });
+    
+    res.json({ response: completion.choices[0].message.content });
+  } catch (error) {
+    console.error('OpenAI error:', error);
+    res.status(500).json({ error: 'AI service unavailable' });
+  }
+});
+
+// AI Welcome message
+app.post('/api/ai/welcome', async (req, res) => {
+  const { user, lastLogin } = req.body;
+  
+  const projects = db.prepare('SELECT * FROM projects').all();
+  const recentActivity = db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT 10').all();
+  
+  let activitySinceLastLogin = [];
+  if (lastLogin) {
+    activitySinceLastLogin = db.prepare('SELECT * FROM activity_log WHERE created_at > ? ORDER BY created_at DESC').all(lastLogin);
+  }
+
+  const systemPrompt = `You are a friendly AI assistant for the AI Projects Kanban board. Generate a brief, warm welcome message for ${user} who just logged in.
+
+${lastLogin ? `Their last login was: ${lastLogin}` : 'This appears to be their first login.'}
+
+${activitySinceLastLogin.length > 0 ? `
+Changes since their last login:
+${activitySinceLastLogin.map(a => `- ${a.user}: ${a.message}`).join('\n')}
+` : ''}
+
+Current project summary:
+- Total projects: ${projects.length}
+- To Do: ${projects.filter(p => p.status === 'todo').length}
+- In Progress: ${projects.filter(p => p.status === 'inprogress').length}
+- Review: ${projects.filter(p => p.status === 'review').length}
+- Done: ${projects.filter(p => p.status === 'done').length}
+
+Keep the message brief (2-3 sentences), friendly, and offer to help with any questions about the board.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: 'Generate a welcome message' }
+      ],
+      max_tokens: 150
+    });
+    
+    res.json({ response: completion.choices[0].message.content });
+  } catch (error) {
+    console.error('OpenAI error:', error);
+    res.json({ response: `Welcome back, ${user}! Let me know if you need any help with the Kanban board.` });
+  }
+});
+
+// DAILY/WEEKLY REPORT GENERATION
+app.post('/api/report', async (req, res) => {
+  const { type } = req.body; // 'daily' or 'weekly'
+  
+  const projects = db.prepare('SELECT * FROM projects').all();
+  const recentActivity = db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT 50').all();
+  const allComments = db.prepare('SELECT c.*, p.name as project_name FROM comments c JOIN projects p ON c.project_id = p.id ORDER BY c.created_at DESC LIMIT 30').all();
+  
+  const today = new Date();
+  const dateRange = type === 'daily' 
+    ? `Today (${today.toLocaleDateString()})`
+    : `Week of ${new Date(today - 7 * 24 * 60 * 60 * 1000).toLocaleDateString()} - ${today.toLocaleDateString()}`;
+
+  const systemPrompt = `You are generating a ${type} status report for management about Collin's work on AI projects.
+
+CONTEXT:
+- Collin is the builder/developer who implements ALL projects
+- Carl, Ann, and Tom are project owners who need visibility into progress
+- This report should be professional, clear, and actionable
+
+Current Projects:
+${projects.map(p => `- ${p.name} (Owner: ${p.owner}, Status: ${p.status}, Priority: ${p.priority}): ${p.description}`).join('\n')}
+
+Recent Activity:
+${recentActivity.slice(0, 25).map(a => `- ${a.created_at}: ${a.user} - ${a.message}`).join('\n')}
+
+Recent Comments:
+${allComments.slice(0, 15).map(c => `- ${c.author} on ${c.project_name}: "${c.text.substring(0, 80)}..."`).join('\n')}
+
+Generate a JSON report. Return ONLY valid JSON:
+{
+  "title": "${type === 'daily' ? 'Daily' : 'Weekly'} Status Report",
+  "date": "${dateRange}",
+  "executiveSummary": "2-3 sentence high-level summary for management",
+  "stats": {
+    "totalProjects": number,
+    "inProgress": number,
+    "completed": number,
+    "blocked": number
+  },
+  "accomplishments": [
+    { "project": "name", "owner": "owner", "description": "what was done/progress made" }
+  ],
+  "inProgress": [
+    { "project": "name", "owner": "owner", "description": "current work", "expectedCompletion": "estimate if possible" }
+  ],
+  "upcoming": [
+    { "project": "name", "owner": "owner", "description": "what's planned next" }
+  ],
+  "blockers": [
+    { "project": "name", "issue": "description of blocker", "needsFrom": "who can help" }
+  ],
+  "recommendations": ["actionable suggestions for management"],
+  "nextSteps": "What Collin will focus on ${type === 'daily' ? 'tomorrow' : 'next week'}"
+}
+
+Be specific and actionable. If there are no blockers, return empty array. Focus on what matters to management.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `Generate the ${type} report as JSON` }
+      ],
+      max_tokens: 1500
+    });
+    
+    const content = completion.choices[0].message.content;
+    let report;
+    try {
+      report = JSON.parse(content.replace(/```json\n?|\n?```/g, '').trim());
+    } catch (e) {
+      report = { title: "Report Generation Error", executiveSummary: "Unable to generate report. Please try again." };
+    }
+    
+    res.json({ report, generatedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error('OpenAI error:', error);
+    res.status(500).json({ error: 'AI service unavailable' });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});

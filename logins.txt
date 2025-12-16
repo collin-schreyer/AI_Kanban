@@ -1,0 +1,14 @@
+AI Projects Kanban - User Logins
+=================================
+
+Username: carl
+Password: carl2024!
+
+Username: ann
+Password: ann2024!
+
+Username: tom
+Password: tom2024!
+
+Username: collin
+Password: collin2024!

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Projects Kanban Board</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-container">
+            <img src="logo.png" alt="Logo" class="login-logo">
+            <h1>AI Projects Kanban</h1>
+            <p>Sign in to continue</p>
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label>Username</label>
+                    <input type="text" id="loginUsername" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" required autocomplete="current-password">
+                </div>
+                <div id="loginError" class="login-error"></div>
+                <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="app-container" id="appContainer" style="display: none;">
+        <header class="header">
+            <div class="header-title">
+                <img src="logo.png" alt="Logo" class="header-logo">
+                <h1>AI Projects Kanban</h1>
+            </div>
+            <div class="header-controls">
+                <div class="user-info">
+                    <span id="currentUserDisplay">Logged in as: </span>
+                    <button class="btn btn-secondary" onclick="handleLogout()">Logout</button>
+                </div>
+                <button class="btn btn-primary" onclick="openAddProjectModal()">+ New Project</button>
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+            <button class="tab-btn active" onclick="switchTab('board')">📋 Board</button>
+            <button class="tab-btn" onclick="switchTab('schedule')">🗓️ Collin's Schedule</button>
+        </div>
+
+        <!-- Board Tab -->
+        <div id="boardTab" class="tab-content active">
+            <div class="filters">
+                <input type="text" id="searchInput" placeholder="Search projects..." oninput="filterCards()">
+                <select id="ownerFilter" onchange="filterCards()">
+                    <option value="">All Owners</option>
+                    <option value="Carl">Carl</option>
+                    <option value="Ann">Ann</option>
+                    <option value="Tom">Tom</option>
+                    <option value="Collin">Collin</option>
+                </select>
+                <select id="priorityFilter" onchange="filterCards()">
+                    <option value="">All Priorities</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+                <button class="btn btn-secondary" onclick="exportData()">📥 Export</button>
+            </div>
+
+            <div class="kanban-board">
+            <div class="kanban-column" data-status="todo">
+                <div class="column-header">
+                    <h2>📋 To Do</h2>
+                    <span class="card-count" id="todo-count">0</span>
+                </div>
+                <div class="card-container" id="todo" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+            </div>
+            <div class="kanban-column" data-status="inprogress">
+                <div class="column-header">
+                    <h2>🔄 In Progress</h2>
+                    <span class="card-count" id="inprogress-count">0</span>
+                </div>
+                <div class="card-container" id="inprogress" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+            </div>
+            <div class="kanban-column" data-status="review">
+                <div class="column-header">
+                    <h2>👀 Review</h2>
+                    <span class="card-count" id="review-count">0</span>
+                </div>
+                <div class="card-container" id="review" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+            </div>
+            <div class="kanban-column" data-status="done">
+                <div class="column-header">
+                    <h2>✅ Done</h2>
+                    <span class="card-count" id="done-count">0</span>
+                </div>
+                <div class="card-container" id="done" ondrop="drop(event)" ondragover="allowDrop(event)"></div>
+            </div>
+        </div>
+
+        <div class="activity-panel">
+                <h3>📝 Activity Log</h3>
+                <div id="activityLog"></div>
+            </div>
+        </div>
+
+        <!-- Collin's Schedule Tab -->
+        <div id="scheduleTab" class="tab-content">
+            <div class="schedule-container">
+                <div class="schedule-header">
+                    <h2>🗓️ Collin's Build Schedule</h2>
+                    <p class="schedule-subtitle">AI-prioritized work queue based on project urgency, owner needs, and deadlines</p>
+                    <div class="schedule-actions">
+                        <button class="btn btn-primary" onclick="refreshSchedule()">🔄 Refresh AI Analysis</button>
+                        <button class="btn btn-secondary" onclick="generateReport('daily')">📋 Daily Report</button>
+                        <button class="btn btn-secondary" onclick="generateReport('weekly')">📊 Weekly Report</button>
+                    </div>
+                </div>
+                <div class="schedule-content" id="scheduleContent">
+                    <div class="schedule-loading">Click "Refresh AI Analysis" to generate Collin's schedule</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Modal -->
+    <div id="reportModal" class="modal">
+        <div class="modal-content modal-report">
+            <span class="close" onclick="closeModal('reportModal')">&times;</span>
+            <div id="reportContent"></div>
+            <div class="report-actions">
+                <button class="btn btn-primary" onclick="copyReport()">📋 Copy to Clipboard</button>
+                <button class="btn btn-secondary" onclick="downloadReport()">📥 Download</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Project Modal -->
+    <div id="projectModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('projectModal')">&times;</span>
+            <h2 id="modalTitle">Add New Project</h2>
+            <form id="projectForm" onsubmit="saveProject(event)">
+                <input type="hidden" id="projectId">
+                <div class="form-group">
+                    <label>Project Name</label>
+                    <input type="text" id="projectName" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="projectDescription" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Owner</label>
+                    <select id="projectOwner" required>
+                        <option value="Carl">Carl</option>
+                        <option value="Ann">Ann</option>
+                        <option value="Tom">Tom</option>
+                        <option value="Collin">Collin</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Priority</label>
+                    <select id="projectPriority">
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Due Date</label>
+                    <input type="date" id="projectDueDate">
+                </div>
+                <div class="form-group">
+                    <label>Tags (comma separated)</label>
+                    <input type="text" id="projectTags" placeholder="e.g., proposal, active, urgent">
+                </div>
+                <button type="submit" class="btn btn-primary">Save Project</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Card Detail Modal -->
+    <div id="cardDetailModal" class="modal">
+        <div class="modal-content modal-large">
+            <span class="close" onclick="closeModal('cardDetailModal')">&times;</span>
+            <div id="cardDetailContent"></div>
+        </div>
+    </div>
+
+    <!-- AI Assistant -->
+    <div id="aiAssistant" class="ai-assistant">
+        <div class="ai-header">
+            <span onclick="toggleAiChat()"><img src="logo.png" alt="" class="ai-logo"> AI Assistant</span>
+            <div class="ai-header-controls">
+                <button class="ai-expand-btn" onclick="toggleAiExpand()" title="Expand">⛶</button>
+                <span id="aiToggle" onclick="toggleAiChat()">▼</span>
+            </div>
+        </div>
+        <div class="ai-body" id="aiBody">
+            <div class="ai-messages" id="aiMessages"></div>
+            <div class="ai-input-container">
+                <input type="text" id="aiInput" placeholder="Ask about your projects..." onkeypress="handleAiKeypress(event)">
+                <button class="btn btn-primary" onclick="sendAiMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
