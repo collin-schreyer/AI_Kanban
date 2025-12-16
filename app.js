@@ -128,14 +128,42 @@ async function renderAllCards() {
     updateCounts();
 }
 
+const CARDS_PER_COLUMN = 10;
+const expandedColumns = { todo: false, inprogress: false, review: false, done: false };
+
 function renderColumn(status) {
     const container = document.getElementById(status);
     const statusProjects = projects.filter(p => p.status === status);
     const statusSubtasks = allSubtasks.filter(s => s.status === status);
     
-    // Render projects first, then subtasks
-    let html = statusProjects.map(project => createCardHTML(project)).join('');
-    html += statusSubtasks.map(subtask => createSubtaskCardHTML(subtask)).join('');
+    // Combine all cards
+    const allCards = [
+        ...statusProjects.map(p => ({ type: 'project', data: p })),
+        ...statusSubtasks.map(s => ({ type: 'subtask', data: s }))
+    ];
+    
+    const totalCount = allCards.length;
+    const isExpanded = expandedColumns[status];
+    const visibleCards = isExpanded ? allCards : allCards.slice(0, CARDS_PER_COLUMN);
+    const hiddenCount = totalCount - CARDS_PER_COLUMN;
+    
+    // Render visible cards
+    let html = visibleCards.map(card => {
+        if (card.type === 'project') {
+            return createCardHTML(card.data);
+        } else {
+            return createSubtaskCardHTML(card.data);
+        }
+    }).join('');
+    
+    // Add expand/collapse button if needed
+    if (totalCount > CARDS_PER_COLUMN) {
+        if (isExpanded) {
+            html += `<button class="expand-btn" onclick="toggleColumnExpand('${status}')">Show Less ▲</button>`;
+        } else {
+            html += `<button class="expand-btn" onclick="toggleColumnExpand('${status}')">Show ${hiddenCount} More ▼</button>`;
+        }
+    }
     
     container.innerHTML = html;
     
@@ -150,6 +178,11 @@ function renderColumn(status) {
         card.addEventListener('dragstart', dragStartSubtask);
         card.addEventListener('dragend', dragEnd);
     });
+}
+
+function toggleColumnExpand(status) {
+    expandedColumns[status] = !expandedColumns[status];
+    renderColumn(status);
 }
 
 function createCardHTML(project) {
@@ -206,8 +239,10 @@ function createSubtaskCardHTML(subtask) {
 
 function updateCounts() {
     ['todo', 'inprogress', 'review', 'done'].forEach(status => {
-        const count = projects.filter(p => p.status === status).length;
-        document.getElementById(`${status}-count`).textContent = count;
+        const projectCount = projects.filter(p => p.status === status).length;
+        const subtaskCount = allSubtasks.filter(s => s.status === status).length;
+        const totalCount = projectCount + subtaskCount;
+        document.getElementById(`${status}-count`).textContent = totalCount;
     });
 }
 
@@ -974,7 +1009,12 @@ function switchTab(tabName) {
 // Dashboard
 async function loadDashboard() {
     const grid = document.getElementById('dashboardGrid');
-    grid.innerHTML = '<div class="dashboard-loading">Loading projects...</div>';
+    grid.innerHTML = `
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <div class="loading-text">Loading dashboard<span class="loading-dots"></span></div>
+        </div>
+    `;
     
     try {
         const [projectsRes, subtasksRes] = await Promise.all([
@@ -1024,7 +1064,12 @@ async function loadDashboard() {
 
 async function openTimelineModal(projectId) {
     const content = document.getElementById('timelineContent');
-    content.innerHTML = '<div class="dashboard-loading">🤖 AI is analyzing project journey...</div>';
+    content.innerHTML = `
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <div class="loading-text">🤖 Analyzing project journey<span class="loading-dots"></span></div>
+        </div>
+    `;
     document.getElementById('timelineModal').style.display = 'block';
     
     try {
@@ -1118,7 +1163,13 @@ async function openTimelineModal(projectId) {
 // Collin's Schedule
 async function refreshSchedule() {
     const content = document.getElementById('scheduleContent');
-    content.innerHTML = '<div class="schedule-loading">🤖 AI is analyzing projects and generating Collin\'s optimized schedule...</div>';
+    content.innerHTML = `
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <div class="loading-text">🤖 AI is analyzing projects<span class="loading-dots"></span></div>
+            <p style="margin-top: 10px; font-size: 0.9rem;">Generating Collin's optimized schedule</p>
+        </div>
+    `;
     
     try {
         const res = await fetch(`${API_URL}/schedule`);
