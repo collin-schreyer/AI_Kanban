@@ -626,6 +626,146 @@ Be specific and actionable. If there are no blockers, return empty array. Focus 
   }
 });
 
+// EXECUTIVE OVERVIEW FOR CARL
+app.get('/api/exec-overview', async (req, res) => {
+  const projects = db.prepare('SELECT * FROM projects').all();
+  const allSubtasks = db.prepare('SELECT * FROM subtasks').all();
+  const recentActivity = db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT 50').all();
+  
+  // Calculate stats per project
+  const projectStats = projects.map(p => {
+    const subtasks = allSubtasks.filter(s => s.project_id === p.id);
+    const completed = subtasks.filter(s => s.status === 'done').length;
+    const inProgress = subtasks.filter(s => s.status === 'inprogress').length;
+    const todo = subtasks.filter(s => s.status === 'todo').length;
+    const progress = subtasks.length > 0 ? Math.round((completed / subtasks.length) * 100) : 0;
+    
+    // Get current and next tasks
+    const currentTasks = subtasks.filter(s => s.status === 'inprogress');
+    const nextTasks = subtasks.filter(s => s.status === 'todo').slice(0, 2);
+    const recentlyCompleted = subtasks.filter(s => s.status === 'done').slice(-3);
+    
+    return {
+      ...p,
+      subtasks,
+      completed,
+      inProgress,
+      todo,
+      totalSubtasks: subtasks.length,
+      progress,
+      currentTasks,
+      nextTasks,
+      recentlyCompleted
+    };
+  });
+
+  // Sort by priority (high, medium, low) then by owner (Carl, Tom, Ann)
+  const priorityOrder = { high: 0, medium: 1, low: 2 };
+  const ownerOrder = { Carl: 0, Tom: 1, Ann: 2, Collin: 3 };
+  
+  projectStats.sort((a, b) => {
+    const priorityDiff = (priorityOrder[a.priority] || 2) - (priorityOrder[b.priority] || 2);
+    if (priorityDiff !== 0) return priorityDiff;
+    return (ownerOrder[a.owner] || 3) - (ownerOrder[b.owner] || 3);
+  });
+
+  const totalSubtasks = allSubtasks.length;
+  const completedSubtasks = allSubtasks.filter(s => s.status === 'done').length;
+  const overallProgress = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+
+  const systemPrompt = `You are generating an executive briefing document for Carl (CTO) to present to Jonathan and the executive team about the AI initiatives portfolio.
+
+CONTEXT:
+- This is a formal executive summary for leadership meetings
+- Carl needs to communicate progress, wins, and strategic direction
+- Collin is the technical lead building all these AI solutions
+- The audience is non-technical executives who care about business impact
+
+PORTFOLIO OVERVIEW:
+Total Projects: ${projects.length}
+Total Sub-tasks: ${totalSubtasks}
+Completed Sub-tasks: ${completedSubtasks}
+Overall Progress: ${overallProgress}%
+
+PROJECT DETAILS (sorted by priority, then owner: Carl, Tom, Ann):
+${projectStats.map(p => `
+PROJECT: ${p.name}
+Owner: ${p.owner}
+Priority: ${p.priority}
+Status: ${p.status}
+Progress: ${p.progress}% (${p.completed}/${p.totalSubtasks} tasks complete)
+Description: ${p.description}
+Currently Working On: ${p.currentTasks.map(s => s.name).join(', ') || 'None active'}
+Up Next: ${p.nextTasks.map(s => s.name).join(', ') || 'None planned'}
+Recently Completed: ${p.recentlyCompleted.map(s => s.name).join(', ') || 'None yet'}
+`).join('\n')}
+
+Generate a JSON executive briefing with EVERY project. Return ONLY valid JSON:
+{
+  "title": "AI Initiatives Portfolio Update",
+  "date": "${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}",
+  "executiveSummary": "3-4 sentence high-level summary suitable for executives. Focus on business value and strategic progress.",
+  "keyWins": ["List 3-4 major accomplishments to highlight"],
+  "portfolioHealth": "One sentence assessment of overall portfolio health",
+  "projects": [
+    FOR EACH PROJECT provide:
+    {
+      "name": "project name",
+      "owner": "owner",
+      "priority": "high/medium/low",
+      "progress": percentage,
+      "status": "current status",
+      "description": "1-2 sentence description",
+      "currentWork": "what Collin is actively working on right now",
+      "recentWins": "what was recently completed",
+      "nextUp": "what's coming next",
+      "businessImpact": "why this matters to the organization",
+      "blockers": "any blockers or null if none"
+    }
+  ],
+  "strategicRecommendations": ["2-3 recommendations for leadership consideration"],
+  "resourceNeeds": ["any resource or support needs to flag"],
+  "nextSteps": "What Carl will focus on in the coming weeks"
+}
+
+IMPORTANT: Include ALL ${projectStats.length} projects in the response, sorted by priority then owner (Carl, Tom, Ann).
+
+Write in a professional, executive-friendly tone. Emphasize business value and outcomes over technical details.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: 'Generate the executive briefing as JSON' }
+      ],
+      max_tokens: 2500
+    });
+    
+    const content = completion.choices[0].message.content;
+    let overview;
+    try {
+      overview = JSON.parse(content.replace(/```json\n?|\n?```/g, '').trim());
+    } catch (e) {
+      overview = { title: "Executive Overview", executiveSummary: "Unable to generate overview. Please try again." };
+    }
+    
+    // Add raw stats
+    overview.stats = {
+      totalProjects: projects.length,
+      totalSubtasks,
+      completedSubtasks,
+      overallProgress,
+      inProgressSubtasks: allSubtasks.filter(s => s.status === 'inprogress').length
+    };
+    
+    res.json({ overview, generatedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error('OpenAI error:', error);
+    res.status(500).json({ error: 'AI service unavailable' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

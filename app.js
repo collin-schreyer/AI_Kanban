@@ -1439,5 +1439,303 @@ function downloadReport() {
     showToast('Report downloaded!');
 }
 
+// Executive Overview for Carl
+let currentExecOverview = null;
+
+async function generateExecOverview() {
+    const content = document.getElementById('execContent');
+    content.innerHTML = `
+        <div class="exec-loading">
+            <div class="exec-loading-spinner"></div>
+            <h3>Generating Executive Briefing</h3>
+            <p>AI is analyzing all projects and preparing Carl's update for Jonathan...</p>
+            <div class="exec-loading-steps">
+                <div class="loading-step active">📊 Analyzing portfolio metrics</div>
+                <div class="loading-step">📁 Reviewing project status</div>
+                <div class="loading-step">✍️ Writing executive summary</div>
+                <div class="loading-step">📋 Formatting report</div>
+            </div>
+        </div>
+    `;
+    document.getElementById('execModal').style.display = 'block';
+    
+    // Animate loading steps
+    const steps = document.querySelectorAll('.loading-step');
+    let stepIndex = 0;
+    const stepInterval = setInterval(() => {
+        if (stepIndex < steps.length) {
+            steps[stepIndex].classList.add('active');
+            stepIndex++;
+        }
+    }, 800);
+    
+    try {
+        const res = await fetch(`${API_URL}/exec-overview`);
+        const data = await res.json();
+        clearInterval(stepInterval);
+        
+        if (data.error) {
+            content.innerHTML = '<div class="dashboard-loading">Failed to generate overview. Please try again.</div>';
+            return;
+        }
+        
+        currentExecOverview = data.overview;
+        renderExecOverview(data.overview);
+    } catch (err) {
+        clearInterval(stepInterval);
+        console.error('Failed to generate exec overview:', err);
+        content.innerHTML = '<div class="dashboard-loading">Failed to connect. Is the server running?</div>';
+    }
+}
+
+function renderExecOverview(overview) {
+    const content = document.getElementById('execContent');
+    const stats = overview.stats || {};
+    
+    content.innerHTML = `
+        <div class="exec-header">
+            <h1>📊 ${overview.title || 'AI Initiatives Portfolio Update'}</h1>
+            <div class="exec-date">${overview.date || new Date().toLocaleDateString()}</div>
+            <div class="exec-subtitle">Prepared for Jonathan & Executive Leadership</div>
+        </div>
+        
+        <div class="exec-summary">
+            <h2>Executive Summary</h2>
+            <p>${overview.executiveSummary || 'Overview generated successfully.'}</p>
+            ${overview.portfolioHealth ? `<p style="margin-top: 15px; font-style: italic; color: #48bb78;"><strong>Portfolio Health:</strong> ${overview.portfolioHealth}</p>` : ''}
+        </div>
+        
+        <div class="exec-stats">
+            <div class="exec-stat">
+                <div class="exec-stat-value">${stats.totalProjects || 0}</div>
+                <div class="exec-stat-label">Active Projects</div>
+            </div>
+            <div class="exec-stat">
+                <div class="exec-stat-value">${stats.overallProgress || 0}%</div>
+                <div class="exec-stat-label">Overall Progress</div>
+            </div>
+            <div class="exec-stat">
+                <div class="exec-stat-value">${stats.completedSubtasks || 0}</div>
+                <div class="exec-stat-label">Tasks Completed</div>
+            </div>
+            <div class="exec-stat">
+                <div class="exec-stat-value">${stats.inProgressSubtasks || 0}</div>
+                <div class="exec-stat-label">In Progress</div>
+            </div>
+        </div>
+        
+        ${overview.keyWins && overview.keyWins.length > 0 ? `
+        <div class="exec-summary" style="border-left-color: #48bb78;">
+            <h2 style="color: #48bb78;">🏆 Key Wins</h2>
+            <ul style="padding-left: 20px; margin: 0;">
+                ${overview.keyWins.map(win => `<li style="margin-bottom: 8px; line-height: 1.6;">${win}</li>`).join('')}
+            </ul>
+        </div>
+        ` : ''}
+        
+        <div class="exec-projects">
+            <h2>📁 All Projects Status (${(overview.projects || []).length} Active Missions)</h2>
+            <p style="color: rgba(255,255,255,0.6); margin-bottom: 20px;">Sorted by priority, then owner (Carl → Tom → Ann)</p>
+            ${(overview.projects || []).map(project => `
+                <div class="exec-project" style="border-left-color: ${project.priority === 'high' ? '#fc8181' : project.priority === 'medium' ? '#f6e05e' : '#68d391'}">
+                    <div class="exec-project-header">
+                        <span class="exec-project-title">${project.name}</span>
+                        <div class="exec-project-meta">
+                            <span class="card-owner owner-${project.owner}">${project.owner}</span>
+                            <span class="card-priority priority-${project.priority}">${project.priority}</span>
+                        </div>
+                    </div>
+                    <p class="exec-project-description">${project.description || ''}</p>
+                    <div class="exec-project-progress">
+                        <div class="exec-project-progress-bar">
+                            <div class="exec-project-progress-fill" style="width: ${project.progress}%"></div>
+                        </div>
+                        <div class="exec-project-status">
+                            <strong>${project.progress}% complete</strong> • Status: ${formatStatus(project.status)}
+                        </div>
+                    </div>
+                    
+                    <div class="exec-project-details">
+                        ${project.currentWork ? `
+                            <div class="exec-detail-row">
+                                <span class="exec-detail-label">🔄 Currently Working On:</span>
+                                <span class="exec-detail-value">${project.currentWork}</span>
+                            </div>
+                        ` : ''}
+                        ${project.recentWins ? `
+                            <div class="exec-detail-row">
+                                <span class="exec-detail-label">✅ Recent Wins:</span>
+                                <span class="exec-detail-value">${project.recentWins}</span>
+                            </div>
+                        ` : ''}
+                        ${project.nextUp ? `
+                            <div class="exec-detail-row">
+                                <span class="exec-detail-label">📅 Up Next:</span>
+                                <span class="exec-detail-value">${project.nextUp}</span>
+                            </div>
+                        ` : ''}
+                        ${project.businessImpact ? `
+                            <div class="exec-detail-row">
+                                <span class="exec-detail-label">💼 Business Impact:</span>
+                                <span class="exec-detail-value" style="color: #a78bfa;">${project.businessImpact}</span>
+                            </div>
+                        ` : ''}
+                        ${project.blockers ? `
+                            <div class="exec-detail-row blocker">
+                                <span class="exec-detail-label">🚧 Blocker:</span>
+                                <span class="exec-detail-value">${project.blockers}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+        
+        ${overview.strategicRecommendations && overview.strategicRecommendations.length > 0 ? `
+        <div class="exec-recommendations">
+            <h2>💡 Strategic Recommendations</h2>
+            <ul>
+                ${overview.strategicRecommendations.map(rec => `<li>${rec}</li>`).join('')}
+            </ul>
+        </div>
+        ` : ''}
+        
+        ${overview.resourceNeeds && overview.resourceNeeds.length > 0 ? `
+        <div class="exec-summary" style="border-left-color: #fc8181;">
+            <h2 style="color: #fc8181;">🚨 Resource Needs</h2>
+            <ul style="padding-left: 20px; margin: 0;">
+                ${overview.resourceNeeds.map(need => `<li style="margin-bottom: 8px;">${need}</li>`).join('')}
+            </ul>
+        </div>
+        ` : ''}
+        
+        ${overview.nextSteps ? `
+        <div class="exec-summary" style="border-left-color: #667eea;">
+            <h2 style="color: #667eea;">➡️ Next Steps</h2>
+            <p>${overview.nextSteps}</p>
+        </div>
+        ` : ''}
+        
+        <div class="exec-footer">
+            <p>Generated by AI Kanban • ${new Date().toLocaleString()}</p>
+            <p>Prepared by Carl for Jonathan & Executive Leadership</p>
+        </div>
+        
+        <div id="execText" style="display:none;"></div>
+    `;
+    
+    // Generate plain text version
+    document.getElementById('execText').textContent = generateExecPlainText(overview);
+}
+
+function generateExecPlainText(overview) {
+    const stats = overview.stats || {};
+    let text = '';
+    
+    text += `${'='.repeat(60)}\n`;
+    text += `${overview.title || 'AI INITIATIVES PORTFOLIO UPDATE'}\n`;
+    text += `${overview.date || new Date().toLocaleDateString()}\n`;
+    text += `Prepared for Jonathan & Executive Leadership\n`;
+    text += `${'='.repeat(60)}\n\n`;
+    
+    text += `EXECUTIVE SUMMARY\n${'-'.repeat(40)}\n`;
+    text += `${overview.executiveSummary || ''}\n\n`;
+    
+    if (overview.portfolioHealth) {
+        text += `Portfolio Health: ${overview.portfolioHealth}\n\n`;
+    }
+    
+    text += `PORTFOLIO METRICS\n${'-'.repeat(40)}\n`;
+    text += `• Active Projects: ${stats.totalProjects || 0}\n`;
+    text += `• Overall Progress: ${stats.overallProgress || 0}%\n`;
+    text += `• Tasks Completed: ${stats.completedSubtasks || 0}\n`;
+    text += `• Tasks In Progress: ${stats.inProgressSubtasks || 0}\n\n`;
+    
+    if (overview.keyWins && overview.keyWins.length > 0) {
+        text += `KEY WINS\n${'-'.repeat(40)}\n`;
+        overview.keyWins.forEach(win => {
+            text += `• ${win}\n`;
+        });
+        text += '\n';
+    }
+    
+    text += `ALL PROJECTS STATUS\n${'-'.repeat(40)}\n`;
+    text += `(Sorted by priority, then owner: Carl → Tom → Ann)\n`;
+    (overview.projects || []).forEach((project, index) => {
+        text += `\n${index + 1}. ${project.name}\n`;
+        text += `   Owner: ${project.owner} | Priority: ${project.priority}\n`;
+        text += `   Progress: ${project.progress}% | Status: ${project.status}\n`;
+        text += `   ${project.description || ''}\n`;
+        if (project.currentWork) {
+            text += `   🔄 Currently Working On: ${project.currentWork}\n`;
+        }
+        if (project.recentWins) {
+            text += `   ✅ Recent Wins: ${project.recentWins}\n`;
+        }
+        if (project.nextUp) {
+            text += `   📅 Up Next: ${project.nextUp}\n`;
+        }
+        if (project.businessImpact) {
+            text += `   💼 Business Impact: ${project.businessImpact}\n`;
+        }
+        if (project.blockers) {
+            text += `   🚧 BLOCKER: ${project.blockers}\n`;
+        }
+    });
+    
+    if (overview.strategicRecommendations && overview.strategicRecommendations.length > 0) {
+        text += `\nSTRATEGIC RECOMMENDATIONS\n${'-'.repeat(40)}\n`;
+        overview.strategicRecommendations.forEach(rec => {
+            text += `• ${rec}\n`;
+        });
+    }
+    
+    if (overview.resourceNeeds && overview.resourceNeeds.length > 0) {
+        text += `\nRESOURCE NEEDS\n${'-'.repeat(40)}\n`;
+        overview.resourceNeeds.forEach(need => {
+            text += `• ${need}\n`;
+        });
+    }
+    
+    if (overview.nextSteps) {
+        text += `\nNEXT STEPS\n${'-'.repeat(40)}\n`;
+        text += `${overview.nextSteps}\n`;
+    }
+    
+    text += `\n${'='.repeat(60)}\n`;
+    text += `Generated: ${new Date().toLocaleString()}\n`;
+    
+    return text;
+}
+
+function copyExecReport() {
+    const text = document.getElementById('execText')?.textContent || '';
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Executive briefing copied to clipboard!');
+    }).catch(() => {
+        showToast('Failed to copy', 'error');
+    });
+}
+
+function downloadExecReport() {
+    const text = document.getElementById('execText')?.textContent || '';
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `AI-Portfolio-Update-${new Date().toISOString().split('T')[0]}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Executive briefing downloaded!');
+}
+
+function emailExecReport() {
+    const text = document.getElementById('execText')?.textContent || '';
+    const subject = encodeURIComponent(`AI Initiatives Portfolio Update - ${new Date().toLocaleDateString()}`);
+    const body = encodeURIComponent(text);
+    window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+    showToast('Opening email client...');
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', init);

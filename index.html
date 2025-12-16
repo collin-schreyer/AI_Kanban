@@ -40,6 +40,7 @@
                     <button class="btn btn-secondary" onclick="handleLogout()">Logout</button>
                 </div>
                 <button class="btn btn-primary" onclick="openAddProjectModal()">+ New Project</button>
+                <button class="btn btn-exec" onclick="generateExecOverview()">📊 Carl's AI Overview</button>
             </div>
         </header>
 
@@ -238,6 +239,19 @@
                 </div>
                 <button type="submit" class="btn btn-primary">Save Sub-Task</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Executive Overview Modal -->
+    <div id="execModal" class="modal">
+        <div class="modal-content modal-exec">
+            <span class="close" onclick="closeModal('execModal')">&times;</span>
+            <div id="execContent"></div>
+            <div class="report-actions">
+                <button class="btn btn-primary" onclick="copyExecReport()">📋 Copy to Clipboard</button>
+                <button class="btn btn-secondary" onclick="downloadExecReport()">📥 Download PDF-Ready</button>
+                <button class="btn btn-secondary" onclick="emailExecReport()">📧 Email to Jonathan</button>
+            </div>
         </div>
     </div>
 
