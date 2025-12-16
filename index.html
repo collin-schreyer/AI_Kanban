@@ -46,13 +46,16 @@
         <!-- Tab Navigation -->
         <div class="tab-nav">
             <button class="tab-btn active" onclick="switchTab('board')">📋 Board</button>
+            <button class="tab-btn" onclick="switchTab('dashboard')">📊 Dashboard</button>
             <button class="tab-btn" onclick="switchTab('schedule')">🗓️ Collin's Schedule</button>
         </div>
 
         <!-- Board Tab -->
         <div id="boardTab" class="tab-content active">
             <div class="filters">
-                <input type="text" id="searchInput" placeholder="Search projects..." oninput="filterCards()">
+                <select id="projectFilter" onchange="filterCards()">
+                    <option value="">All Projects</option>
+                </select>
                 <select id="ownerFilter" onchange="filterCards()">
                     <option value="">All Owners</option>
                     <option value="Carl">Carl</option>
@@ -103,6 +106,19 @@
         <div class="activity-panel">
                 <h3>📝 Activity Log</h3>
                 <div id="activityLog"></div>
+            </div>
+        </div>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboardTab" class="tab-content">
+            <div class="dashboard-container">
+                <div class="dashboard-header">
+                    <h2>📊 Project Dashboard</h2>
+                    <p class="dashboard-subtitle">AI-generated timelines and project journey analysis</p>
+                </div>
+                <div class="dashboard-grid" id="dashboardGrid">
+                    <div class="dashboard-loading">Loading projects...</div>
+                </div>
             </div>
         </div>
 
@@ -187,6 +203,49 @@
         <div class="modal-content modal-large">
             <span class="close" onclick="closeModal('cardDetailModal')">&times;</span>
             <div id="cardDetailContent"></div>
+        </div>
+    </div>
+
+    <!-- Add Subtask Modal -->
+    <div id="subtaskModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('subtaskModal')">&times;</span>
+            <h2 id="subtaskModalTitle">Add Sub-Task</h2>
+            <form id="subtaskForm" onsubmit="saveSubtask(event)">
+                <input type="hidden" id="subtaskId">
+                <input type="hidden" id="subtaskProjectId">
+                <div class="form-group">
+                    <label>Sub-Task Name</label>
+                    <input type="text" id="subtaskName" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="subtaskDescription" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Assignee</label>
+                    <select id="subtaskAssignee">
+                        <option value="">Unassigned</option>
+                        <option value="Collin">Collin</option>
+                        <option value="Carl">Carl</option>
+                        <option value="Ann">Ann</option>
+                        <option value="Tom">Tom</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Due Date</label>
+                    <input type="date" id="subtaskDueDate">
+                </div>
+                <button type="submit" class="btn btn-primary">Save Sub-Task</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Timeline Modal -->
+    <div id="timelineModal" class="modal">
+        <div class="modal-content modal-large">
+            <span class="close" onclick="closeModal('timelineModal')">&times;</span>
+            <div id="timelineContent"></div>
         </div>
     </div>
 

@@ -64,6 +64,19 @@ db.exec(`
     message TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
+
+  CREATE TABLE IF NOT EXISTS subtasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    status TEXT DEFAULT 'todo',
+    assignee TEXT,
+    due_date TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    completed_at TEXT,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  );
 `);
 
 // Seed initial users if not exist
@@ -208,6 +221,153 @@ app.post('/api/activity', (req, res) => {
   const { user, message } = req.body;
   db.prepare('INSERT INTO activity_log (user, message) VALUES (?, ?)').run(user, message);
   res.json({ success: true });
+});
+
+// SUBTASKS ROUTES
+app.get('/api/projects/:id/subtasks', (req, res) => {
+  const subtasks = db.prepare('SELECT * FROM subtasks WHERE project_id = ? ORDER BY created_at ASC').all(req.params.id);
+  res.json(subtasks);
+});
+
+app.post('/api/projects/:id/subtasks', (req, res) => {
+  const { id } = req.params;
+  const { name, description, assignee, dueDate, user } = req.body;
+  
+  const result = db.prepare(
+    'INSERT INTO subtasks (project_id, name, description, assignee, due_date) VALUES (?, ?, ?, ?, ?)'
+  ).run(id, name, description || '', assignee || null, dueDate || null);
+  
+  const project = db.prepare('SELECT name FROM projects WHERE id = ?').get(id);
+  db.prepare('INSERT INTO history (project_id, user, action, details) VALUES (?, ?, ?, ?)').run(
+    id, user, 'subtask_added', `Added subtask "${name}"`
+  );
+  db.prepare('INSERT INTO activity_log (user, message) VALUES (?, ?)').run(user, `Added subtask "${name}" to ${project?.name}`);
+  
+  res.json({ success: true, id: result.lastInsertRowid });
+});
+
+app.put('/api/subtasks/:id', (req, res) => {
+  const { id } = req.params;
+  const { name, description, status, assignee, dueDate, user } = req.body;
+  
+  const oldSubtask = db.prepare('SELECT * FROM subtasks WHERE id = ?').get(id);
+  const completedAt = status === 'done' && oldSubtask?.status !== 'done' ? new Date().toISOString() : oldSubtask?.completed_at;
+  
+  db.prepare(
+    'UPDATE subtasks SET name=?, description=?, status=?, assignee=?, due_date=?, completed_at=? WHERE id=?'
+  ).run(name, description, status, assignee, dueDate || null, completedAt, id);
+  
+  if (oldSubtask) {
+    const project = db.prepare('SELECT name FROM projects WHERE id = ?').get(oldSubtask.project_id);
+    if (oldSubtask.status !== status) {
+      db.prepare('INSERT INTO history (project_id, user, action, details) VALUES (?, ?, ?, ?)').run(
+        oldSubtask.project_id, user, 'subtask_status', `Subtask "${name}" moved to ${status}`
+      );
+      db.prepare('INSERT INTO activity_log (user, message) VALUES (?, ?)').run(
+        user, `Updated subtask "${name}" to ${status} on ${project?.name}`
+      );
+    }
+  }
+  
+  res.json({ success: true });
+});
+
+app.delete('/api/subtasks/:id', (req, res) => {
+  const { id } = req.params;
+  const { user } = req.body;
+  
+  const subtask = db.prepare('SELECT s.*, p.name as project_name FROM subtasks s JOIN projects p ON s.project_id = p.id WHERE s.id = ?').get(id);
+  
+  if (subtask) {
+    db.prepare('DELETE FROM subtasks WHERE id = ?').run(id);
+    db.prepare('INSERT INTO history (project_id, user, action, details) VALUES (?, ?, ?, ?)').run(
+      subtask.project_id, user, 'subtask_deleted', `Deleted subtask "${subtask.name}"`
+    );
+    db.prepare('INSERT INTO activity_log (user, message) VALUES (?, ?)').run(user, `Deleted subtask "${subtask.name}" from ${subtask.project_name}`);
+  }
+  
+  res.json({ success: true });
+});
+
+// Get all subtasks (for dashboard)
+app.get('/api/subtasks', (req, res) => {
+  const subtasks = db.prepare(`
+    SELECT s.*, p.name as project_name, p.owner as project_owner 
+    FROM subtasks s 
+    JOIN projects p ON s.project_id = p.id 
+    ORDER BY s.created_at DESC
+  `).all();
+  res.json(subtasks);
+});
+
+// DASHBOARD - AI Timeline Generation
+app.get('/api/dashboard/timeline/:projectId', async (req, res) => {
+  const { projectId } = req.params;
+  
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+  const history = db.prepare('SELECT * FROM history WHERE project_id = ? ORDER BY created_at ASC').all(projectId);
+  const subtasks = db.prepare('SELECT * FROM subtasks WHERE project_id = ? ORDER BY created_at ASC').all(projectId);
+  const comments = db.prepare('SELECT * FROM comments WHERE project_id = ? ORDER BY created_at ASC').all(projectId);
+  
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+
+  const systemPrompt = `You are analyzing the journey of a project and generating an insightful timeline narrative.
+
+Project: ${project.name}
+Owner: ${project.owner}
+Current Status: ${project.status}
+Description: ${project.description}
+Created: ${project.created_at}
+
+History Events:
+${history.map(h => `- ${h.created_at}: ${h.user} - ${h.action}: ${h.details}`).join('\n')}
+
+Subtasks:
+${subtasks.map(s => `- ${s.name} (${s.status}) - Created: ${s.created_at}${s.completed_at ? ', Completed: ' + s.completed_at : ''}`).join('\n')}
+
+Comments:
+${comments.map(c => `- ${c.created_at}: ${c.author}: "${c.text.substring(0, 100)}"`).join('\n')}
+
+Generate a JSON timeline analysis. Return ONLY valid JSON:
+{
+  "projectName": "${project.name}",
+  "journeySummary": "2-3 sentence narrative of the project's journey so far",
+  "keyMilestones": [
+    { "date": "date", "event": "what happened", "significance": "why it matters" }
+  ],
+  "currentPhase": "description of where the project is now",
+  "progressPercentage": estimated_percentage_complete,
+  "estimatedCompletion": "estimate based on velocity",
+  "insights": ["observations about the project's progress"],
+  "risks": ["potential issues or delays identified"],
+  "recommendations": ["suggestions for moving forward"]
+}`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: 'Generate the timeline analysis as JSON' }
+      ],
+      max_tokens: 1000
+    });
+    
+    const content = completion.choices[0].message.content;
+    let timeline;
+    try {
+      timeline = JSON.parse(content.replace(/```json\n?|\n?```/g, '').trim());
+    } catch (e) {
+      timeline = { journeySummary: "Unable to generate timeline. Please try again.", keyMilestones: [] };
+    }
+    
+    res.json({ timeline, project, history, subtasks, generatedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error('OpenAI error:', error);
+    res.status(500).json({ error: 'AI service unavailable' });
+  }
 });
 
 // COLLIN'S SCHEDULE - AI Generated

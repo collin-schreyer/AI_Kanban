@@ -1011,3 +1011,390 @@ body {
     vertical-align: middle;
     margin-right: 8px;
 }
+
+
+/* Subtasks */
+.subtasks-section {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.subtasks-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.subtasks-header h3 {
+    margin: 0;
+}
+
+.subtask-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.subtask-item {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 12px 15px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s ease;
+}
+
+.subtask-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.subtask-checkbox {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: #667eea;
+}
+
+.subtask-content {
+    flex: 1;
+}
+
+.subtask-name {
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.subtask-name.completed {
+    text-decoration: line-through;
+    opacity: 0.6;
+}
+
+.subtask-meta {
+    display: flex;
+    gap: 10px;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.subtask-actions {
+    display: flex;
+    gap: 5px;
+}
+
+.subtask-actions button {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.subtask-actions button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.subtask-progress {
+    margin-top: 15px;
+}
+
+.subtask-progress-bar {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.subtask-progress-fill {
+    height: 100%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    transition: width 0.3s ease;
+}
+
+.subtask-progress-text {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.6);
+    margin-top: 5px;
+}
+
+/* Dashboard */
+.dashboard-container {
+    padding: 20px 0;
+}
+
+.dashboard-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.dashboard-header h2 {
+    font-size: 1.8rem;
+    margin-bottom: 10px;
+}
+
+.dashboard-subtitle {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 20px;
+}
+
+.dashboard-card {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.dashboard-card:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateY(-3px);
+}
+
+.dashboard-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 15px;
+}
+
+.dashboard-card-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.dashboard-card-status {
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.dashboard-card-owner {
+    margin-bottom: 10px;
+}
+
+.dashboard-card-progress {
+    margin: 15px 0;
+}
+
+.dashboard-card-stats {
+    display: flex;
+    gap: 15px;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.dashboard-card-action {
+    margin-top: 15px;
+    text-align: center;
+}
+
+/* Timeline Modal */
+.timeline-header {
+    text-align: center;
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.timeline-header h2 {
+    margin-bottom: 10px;
+}
+
+.timeline-summary {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+    border: 1px solid rgba(102, 126, 234, 0.3);
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 25px;
+    line-height: 1.6;
+}
+
+.timeline-progress {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 25px;
+}
+
+.timeline-progress-circle {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    font-weight: 700;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.timeline-progress-circle::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(
+        #667eea calc(var(--progress) * 1%), 
+        rgba(255,255,255,0.1) calc(var(--progress) * 1%)
+    );
+}
+
+.timeline-progress-circle::after {
+    content: '';
+    position: absolute;
+    inset: 12px;
+    border-radius: 50%;
+    background: #1a1a2e;
+}
+
+.timeline-progress-circle span {
+    position: relative;
+    z-index: 1;
+}
+
+.timeline-progress-info h4 {
+    margin-bottom: 5px;
+}
+
+.timeline-milestones {
+    margin-bottom: 25px;
+}
+
+.timeline-milestones h3 {
+    margin-bottom: 15px;
+}
+
+.milestone-item {
+    display: flex;
+    gap: 15px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+.milestone-date {
+    min-width: 100px;
+    color: #667eea;
+    font-weight: 500;
+}
+
+.milestone-content {
+    flex: 1;
+}
+
+.milestone-event {
+    font-weight: 500;
+    margin-bottom: 5px;
+}
+
+.milestone-significance {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.timeline-insights {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.timeline-insights-section {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    border-radius: 10px;
+}
+
+.timeline-insights-section h4 {
+    margin-bottom: 10px;
+    color: #a78bfa;
+}
+
+.timeline-insights-section ul {
+    padding-left: 20px;
+}
+
+.timeline-insights-section li {
+    margin-bottom: 8px;
+    line-height: 1.4;
+}
+
+.dashboard-loading {
+    text-align: center;
+    padding: 60px;
+    color: rgba(255, 255, 255, 0.5);
+    grid-column: 1 / -1;
+}
+
+
+/* Subtask Cards on Board */
+.subtask-card {
+    transform: scale(0.9);
+    transform-origin: top left;
+    margin-left: 10px;
+    border-left-width: 3px;
+    opacity: 0.95;
+    position: relative;
+}
+
+.subtask-card::before {
+    content: "SUB-TASK";
+    position: absolute;
+    top: -8px;
+    right: 10px;
+    font-size: 0.65rem;
+    background: rgba(102, 126, 234, 0.8);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.subtask-parent-label {
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    display: inline-block;
+    font-weight: 600;
+}
+
+.subtask-card .card-title {
+    font-size: 0.95rem;
+}
+
+.subtask-card .card-description {
+    font-size: 0.8rem;
+    -webkit-line-clamp: 1;
+}
+
+.subtask-card .card-meta {
+    font-size: 0.75rem;
+}
+
+.subtask-card .card-owner,
+.subtask-card .card-priority {
+    padding: 2px 8px;
+    font-size: 0.7rem;
+}
+
+.card-subtask-count {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.8rem;
+}
+
+/* Parent project info in subtask detail */
+.parent-project-info:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+}

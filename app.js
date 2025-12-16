@@ -78,6 +78,7 @@ async function loadProjects() {
     try {
         const res = await fetch(`${API_URL}/projects`);
         projects = await res.json();
+        populateProjectFilter();
         renderAllCards();
     } catch (err) {
         console.error('Failed to load projects:', err);
@@ -109,7 +110,18 @@ async function logActivity(message) {
 }
 
 // Rendering
-function renderAllCards() {
+let allSubtasks = [];
+
+async function renderAllCards() {
+    // Load subtasks
+    try {
+        const res = await fetch(`${API_URL}/subtasks`);
+        allSubtasks = await res.json();
+    } catch (err) {
+        console.error('Failed to load subtasks:', err);
+        allSubtasks = [];
+    }
+    
     ['todo', 'inprogress', 'review', 'done'].forEach(status => {
         renderColumn(status);
     });
@@ -119,11 +131,23 @@ function renderAllCards() {
 function renderColumn(status) {
     const container = document.getElementById(status);
     const statusProjects = projects.filter(p => p.status === status);
+    const statusSubtasks = allSubtasks.filter(s => s.status === status);
     
-    container.innerHTML = statusProjects.map(project => createCardHTML(project)).join('');
+    // Render projects first, then subtasks
+    let html = statusProjects.map(project => createCardHTML(project)).join('');
+    html += statusSubtasks.map(subtask => createSubtaskCardHTML(subtask)).join('');
     
-    container.querySelectorAll('.kanban-card').forEach(card => {
+    container.innerHTML = html;
+    
+    // Add drag events to project cards
+    container.querySelectorAll('.kanban-card:not(.subtask-card)').forEach(card => {
         card.addEventListener('dragstart', dragStart);
+        card.addEventListener('dragend', dragEnd);
+    });
+    
+    // Add drag events to subtask cards
+    container.querySelectorAll('.subtask-card').forEach(card => {
+        card.addEventListener('dragstart', dragStartSubtask);
         card.addEventListener('dragend', dragEnd);
     });
 }
@@ -131,6 +155,8 @@ function renderColumn(status) {
 function createCardHTML(project) {
     const isOverdue = project.due_date && new Date(project.due_date) < new Date();
     const tags = Array.isArray(project.tags) ? project.tags : [];
+    const projectSubtasks = allSubtasks.filter(s => s.project_id === project.id);
+    const completedSubtasks = projectSubtasks.filter(s => s.status === 'done').length;
     
     return `
         <div class="kanban-card" draggable="true" data-id="${project.id}" id="card-${project.id}" onclick="openCardDetail(${project.id})">
@@ -146,8 +172,34 @@ function createCardHTML(project) {
                 <span class="card-owner owner-${project.owner}">${project.owner}</span>
                 <span class="card-priority priority-${project.priority}">${project.priority}</span>
                 ${project.due_date ? `<span class="card-due ${isOverdue ? 'overdue' : ''}">📅 ${project.due_date}</span>` : ''}
+                ${projectSubtasks.length > 0 ? `<span class="card-subtask-count">📝 ${completedSubtasks}/${projectSubtasks.length}</span>` : ''}
             </div>
             ${tags.length > 0 ? `<div class="card-tags">${tags.map(t => `<span class="tag">${t}</span>`).join('')}</div>` : ''}
+        </div>
+    `;
+}
+
+function createSubtaskCardHTML(subtask) {
+    const parentProject = projects.find(p => p.id === subtask.project_id);
+    const isOverdue = subtask.due_date && new Date(subtask.due_date) < new Date();
+    
+    return `
+        <div class="kanban-card subtask-card" draggable="true" data-subtask-id="${subtask.id}" data-project-id="${subtask.project_id}" onclick="openSubtaskDetail(${subtask.id}, ${subtask.project_id})">
+            <div class="subtask-parent-label owner-${parentProject?.owner || 'default'}">
+                ${parentProject?.name || 'Unknown Project'}
+            </div>
+            <div class="card-header">
+                <span class="card-title">${subtask.name}</span>
+                <div class="card-actions" onclick="event.stopPropagation()">
+                    <button onclick="editSubtask(${subtask.id}, ${subtask.project_id})" title="Edit">✏️</button>
+                    <button onclick="deleteSubtask(${subtask.id}, ${subtask.project_id})" title="Delete">🗑️</button>
+                </div>
+            </div>
+            ${subtask.description ? `<p class="card-description">${subtask.description}</p>` : ''}
+            <div class="card-meta">
+                ${subtask.assignee ? `<span class="card-owner owner-${subtask.assignee}">${subtask.assignee}</span>` : '<span class="card-owner" style="background: #4a5568;">Unassigned</span>'}
+                ${subtask.due_date ? `<span class="card-due ${isOverdue ? 'overdue' : ''}">📅 ${subtask.due_date}</span>` : ''}
+            </div>
         </div>
     `;
 }
@@ -171,11 +223,22 @@ function renderActivityLog(activity) {
 
 
 // Drag and Drop
+let isSubtaskDrag = false;
+
 function dragStart(e) {
+    isSubtaskDrag = false;
     draggedCard = e.target;
     e.target.classList.add('dragging');
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', e.target.dataset.id);
+}
+
+function dragStartSubtask(e) {
+    isSubtaskDrag = true;
+    draggedCard = e.target;
+    e.target.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', e.target.dataset.subtaskId);
 }
 
 function dragEnd(e) {
@@ -193,9 +256,41 @@ async function drop(e) {
     const cardId = parseInt(e.dataTransfer.getData('text/plain'));
     const newStatus = e.currentTarget.id;
     
-    const project = projects.find(p => p.id === cardId);
-    if (project && project.status !== newStatus) {
-        await updateProjectStatus(project, newStatus);
+    if (isSubtaskDrag) {
+        // Handle subtask drop
+        const subtask = allSubtasks.find(s => s.id === cardId);
+        if (subtask && subtask.status !== newStatus) {
+            await updateSubtaskStatus(subtask, newStatus);
+        }
+    } else {
+        // Handle project drop
+        const project = projects.find(p => p.id === cardId);
+        if (project && project.status !== newStatus) {
+            await updateProjectStatus(project, newStatus);
+        }
+    }
+    isSubtaskDrag = false;
+}
+
+async function updateSubtaskStatus(subtask, newStatus) {
+    try {
+        await fetch(`${API_URL}/subtasks/${subtask.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ...subtask,
+                status: newStatus,
+                dueDate: subtask.due_date,
+                user: currentUser
+            })
+        });
+        
+        await renderAllCards();
+        await loadActivity();
+        showToast(`Moved subtask to ${formatStatus(newStatus)}`);
+    } catch (err) {
+        console.error('Failed to update subtask:', err);
+        showToast('Failed to update subtask', 'error');
     }
 }
 
@@ -311,17 +406,22 @@ async function openCardDetail(id) {
     const project = projects.find(p => p.id === id);
     if (!project) return;
     
-    // Fetch comments and history
-    const [commentsRes, historyRes] = await Promise.all([
+    // Fetch comments, history, and subtasks
+    const [commentsRes, historyRes, subtasksRes] = await Promise.all([
         fetch(`${API_URL}/projects/${id}/comments`),
-        fetch(`${API_URL}/projects/${id}/history`)
+        fetch(`${API_URL}/projects/${id}/history`),
+        fetch(`${API_URL}/projects/${id}/subtasks`)
     ]);
     
     const comments = await commentsRes.json();
     const history = await historyRes.json();
+    const subtasks = await subtasksRes.json();
     
     const isOverdue = project.due_date && new Date(project.due_date) < new Date();
     const tags = Array.isArray(project.tags) ? project.tags : [];
+    
+    const completedSubtasks = subtasks.filter(s => s.status === 'done').length;
+    const subtaskProgress = subtasks.length > 0 ? Math.round((completedSubtasks / subtasks.length) * 100) : 0;
     
     const html = `
         <div class="detail-header">
@@ -345,6 +445,24 @@ async function openCardDetail(id) {
                 <div class="card-tags">${tags.map(t => `<span class="tag">${t}</span>`).join('')}</div>
             </div>
         ` : ''}
+        
+        <div class="detail-section subtasks-section">
+            <div class="subtasks-header">
+                <h3>📝 Sub-Tasks (${completedSubtasks}/${subtasks.length})</h3>
+                <button class="btn btn-secondary" onclick="openAddSubtaskModal(${id})">+ Add Sub-Task</button>
+            </div>
+            ${subtasks.length > 0 ? `
+                <div class="subtask-progress">
+                    <div class="subtask-progress-bar">
+                        <div class="subtask-progress-fill" style="width: ${subtaskProgress}%"></div>
+                    </div>
+                    <div class="subtask-progress-text">${subtaskProgress}% complete</div>
+                </div>
+            ` : ''}
+            <div class="subtask-list" id="subtaskList-${id}">
+                ${renderSubtasks(subtasks, id)}
+            </div>
+        </div>
         
         <div class="detail-section">
             <h3>📜 Timeline</h3>
@@ -385,6 +503,212 @@ async function openCardDetail(id) {
     
     document.getElementById('cardDetailContent').innerHTML = html;
     document.getElementById('cardDetailModal').style.display = 'block';
+}
+
+// Subtasks
+function renderSubtasks(subtasks, projectId) {
+    if (!subtasks || subtasks.length === 0) {
+        return '<p style="color: rgba(255,255,255,0.5);">No sub-tasks yet. Add one to break down this project.</p>';
+    }
+    
+    return subtasks.map(s => `
+        <div class="subtask-item">
+            <input type="checkbox" class="subtask-checkbox" 
+                ${s.status === 'done' ? 'checked' : ''} 
+                onchange="toggleSubtask(${s.id}, ${projectId}, this.checked)">
+            <div class="subtask-content">
+                <div class="subtask-name ${s.status === 'done' ? 'completed' : ''}">${s.name}</div>
+                <div class="subtask-meta">
+                    ${s.assignee ? `<span class="owner-${s.assignee}" style="padding: 2px 8px; border-radius: 10px;">${s.assignee}</span>` : ''}
+                    ${s.due_date ? `<span>📅 ${s.due_date}</span>` : ''}
+                </div>
+            </div>
+            <div class="subtask-actions">
+                <button onclick="editSubtask(${s.id}, ${projectId})" title="Edit">✏️</button>
+                <button onclick="deleteSubtask(${s.id}, ${projectId})" title="Delete">🗑️</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function openAddSubtaskModal(projectId) {
+    document.getElementById('subtaskModalTitle').textContent = 'Add Sub-Task';
+    document.getElementById('subtaskForm').reset();
+    document.getElementById('subtaskId').value = '';
+    document.getElementById('subtaskProjectId').value = projectId;
+    document.getElementById('subtaskModal').style.display = 'block';
+}
+
+async function saveSubtask(e) {
+    e.preventDefault();
+    
+    const subtaskId = document.getElementById('subtaskId').value;
+    const projectId = document.getElementById('subtaskProjectId').value;
+    const data = {
+        name: document.getElementById('subtaskName').value,
+        description: document.getElementById('subtaskDescription').value,
+        assignee: document.getElementById('subtaskAssignee').value,
+        dueDate: document.getElementById('subtaskDueDate').value,
+        user: currentUser
+    };
+    
+    try {
+        if (subtaskId) {
+            await fetch(`${API_URL}/subtasks/${subtaskId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...data, status: 'todo' })
+            });
+            showToast('Sub-task updated');
+        } else {
+            await fetch(`${API_URL}/projects/${projectId}/subtasks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            showToast('Sub-task added');
+        }
+        
+        closeModal('subtaskModal');
+        await openCardDetail(parseInt(projectId));
+        await loadActivity();
+    } catch (err) {
+        console.error('Failed to save subtask:', err);
+        showToast('Failed to save sub-task', 'error');
+    }
+}
+
+async function toggleSubtask(subtaskId, projectId, completed) {
+    try {
+        const res = await fetch(`${API_URL}/projects/${projectId}/subtasks`);
+        const subtasks = await res.json();
+        const subtask = subtasks.find(s => s.id === subtaskId);
+        
+        if (subtask) {
+            await fetch(`${API_URL}/subtasks/${subtaskId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...subtask,
+                    status: completed ? 'done' : 'todo',
+                    user: currentUser
+                })
+            });
+            
+            await openCardDetail(projectId);
+            await loadActivity();
+        }
+    } catch (err) {
+        console.error('Failed to toggle subtask:', err);
+    }
+}
+
+async function editSubtask(subtaskId, projectId) {
+    try {
+        const res = await fetch(`${API_URL}/projects/${projectId}/subtasks`);
+        const subtasks = await res.json();
+        const subtask = subtasks.find(s => s.id === subtaskId);
+        
+        if (subtask) {
+            document.getElementById('subtaskModalTitle').textContent = 'Edit Sub-Task';
+            document.getElementById('subtaskId').value = subtask.id;
+            document.getElementById('subtaskProjectId').value = projectId;
+            document.getElementById('subtaskName').value = subtask.name;
+            document.getElementById('subtaskDescription').value = subtask.description || '';
+            document.getElementById('subtaskAssignee').value = subtask.assignee || '';
+            document.getElementById('subtaskDueDate').value = subtask.due_date || '';
+            document.getElementById('subtaskModal').style.display = 'block';
+        }
+    } catch (err) {
+        console.error('Failed to load subtask:', err);
+    }
+}
+
+async function deleteSubtask(subtaskId, projectId) {
+    if (!confirm('Delete this sub-task?')) return;
+    
+    try {
+        await fetch(`${API_URL}/subtasks/${subtaskId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: currentUser })
+        });
+        
+        showToast('Sub-task deleted');
+        await renderAllCards();
+        await loadActivity();
+    } catch (err) {
+        console.error('Failed to delete subtask:', err);
+        showToast('Failed to delete sub-task', 'error');
+    }
+}
+
+async function openSubtaskDetail(subtaskId, projectId) {
+    const subtask = allSubtasks.find(s => s.id === subtaskId);
+    const parentProject = projects.find(p => p.id === projectId);
+    
+    if (!subtask || !parentProject) return;
+    
+    const isOverdue = subtask.due_date && new Date(subtask.due_date) < new Date();
+    
+    const html = `
+        <div class="detail-header">
+            <div class="subtask-parent-label owner-${parentProject.owner}" style="margin-bottom: 10px; display: inline-block;">
+                📁 ${parentProject.name}
+            </div>
+            <h2>${subtask.name}</h2>
+            <div class="detail-meta">
+                ${subtask.assignee ? `<span class="card-owner owner-${subtask.assignee}">${subtask.assignee}</span>` : '<span class="card-owner" style="background: #4a5568;">Unassigned</span>'}
+                ${subtask.due_date ? `<span class="card-due ${isOverdue ? 'overdue' : ''}">📅 ${subtask.due_date}</span>` : ''}
+                <span>Status: ${formatStatus(subtask.status)}</span>
+            </div>
+        </div>
+        
+        <div class="detail-description">
+            <strong>📄 Sub-Task Description:</strong><br><br>
+            ${subtask.description || 'No description provided.'}
+        </div>
+        
+        <div class="detail-section">
+            <h3>📁 Parent Project</h3>
+            <div class="parent-project-info" onclick="openCardDetail(${parentProject.id}); closeModal('cardDetailModal');" style="cursor: pointer; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 10px; margin-top: 10px;">
+                <div style="font-weight: 600; margin-bottom: 8px;">${parentProject.name}</div>
+                <div class="card-meta">
+                    <span class="card-owner owner-${parentProject.owner}">${parentProject.owner}</span>
+                    <span class="card-priority priority-${parentProject.priority}">${parentProject.priority}</span>
+                    <span>${formatStatus(parentProject.status)}</span>
+                </div>
+                <p style="margin-top: 10px; font-size: 0.9rem; color: rgba(255,255,255,0.7);">${parentProject.description || ''}</p>
+                <p style="margin-top: 10px; color: #667eea; font-size: 0.85rem;">Click to view parent project →</p>
+            </div>
+        </div>
+        
+        <div class="detail-section">
+            <h3>⚡ Quick Actions</h3>
+            <div class="quick-actions">
+                <button class="btn btn-secondary" onclick="updateSubtaskStatusFromDetail(${subtask.id}, 'todo')">→ To Do</button>
+                <button class="btn btn-secondary" onclick="updateSubtaskStatusFromDetail(${subtask.id}, 'inprogress')">→ In Progress</button>
+                <button class="btn btn-secondary" onclick="updateSubtaskStatusFromDetail(${subtask.id}, 'review')">→ Review</button>
+                <button class="btn btn-secondary" onclick="updateSubtaskStatusFromDetail(${subtask.id}, 'done')">→ Done</button>
+            </div>
+        </div>
+        
+        <div class="detail-section" style="margin-top: 20px;">
+            <button class="btn btn-secondary" onclick="editSubtask(${subtask.id}, ${projectId})" style="margin-right: 10px;">✏️ Edit Sub-Task</button>
+            <button class="btn btn-danger" onclick="deleteSubtask(${subtask.id}, ${projectId}); closeModal('cardDetailModal');">🗑️ Delete Sub-Task</button>
+        </div>
+    `;
+    
+    document.getElementById('cardDetailContent').innerHTML = html;
+    document.getElementById('cardDetailModal').style.display = 'block';
+}
+
+async function updateSubtaskStatusFromDetail(subtaskId, newStatus) {
+    const subtask = allSubtasks.find(s => s.id === subtaskId);
+    if (subtask && subtask.status !== newStatus) {
+        await updateSubtaskStatus(subtask, newStatus);
+        closeModal('cardDetailModal');
+    }
 }
 
 function renderComments(comments) {
@@ -515,22 +839,47 @@ async function sendAiMessage() {
 
 // Filtering
 function filterCards() {
-    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const projectFilter = document.getElementById('projectFilter').value;
     const ownerFilter = document.getElementById('ownerFilter').value;
     const priorityFilter = document.getElementById('priorityFilter').value;
     
-    document.querySelectorAll('.kanban-card').forEach(card => {
+    document.querySelectorAll('.kanban-card:not(.subtask-card)').forEach(card => {
         const id = parseInt(card.dataset.id);
         const project = projects.find(p => p.id === id);
         
         if (!project) return;
         
-        const matchesSearch = project.name.toLowerCase().includes(searchTerm) || 
-                             (project.description && project.description.toLowerCase().includes(searchTerm));
+        const matchesProject = !projectFilter || project.id === parseInt(projectFilter);
         const matchesOwner = !ownerFilter || project.owner === ownerFilter;
         const matchesPriority = !priorityFilter || project.priority === priorityFilter;
         
-        card.classList.toggle('hidden', !(matchesSearch && matchesOwner && matchesPriority));
+        card.classList.toggle('hidden', !(matchesProject && matchesOwner && matchesPriority));
+    });
+    
+    // Filter subtask cards
+    document.querySelectorAll('.subtask-card').forEach(card => {
+        const projectId = parseInt(card.dataset.projectId);
+        const project = projects.find(p => p.id === projectId);
+        
+        if (!project) return;
+        
+        const matchesProject = !projectFilter || projectId === parseInt(projectFilter);
+        const matchesOwner = !ownerFilter || project.owner === ownerFilter;
+        const matchesPriority = !priorityFilter || project.priority === priorityFilter;
+        
+        card.classList.toggle('hidden', !(matchesProject && matchesOwner && matchesPriority));
+    });
+}
+
+function populateProjectFilter() {
+    const select = document.getElementById('projectFilter');
+    select.innerHTML = '<option value="">All Projects</option>';
+    
+    projects.forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.id;
+        option.textContent = p.name;
+        select.appendChild(option);
     });
 }
 
@@ -616,12 +965,153 @@ function switchTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
     document.getElementById(`${tabName}Tab`).classList.add('active');
     
-    // Load schedule if switching to schedule tab
-    if (tabName === 'schedule') {
-        const content = document.getElementById('scheduleContent');
-        if (content.querySelector('.schedule-loading')) {
-            // Auto-load on first visit
+    // Load dashboard if switching to dashboard tab
+    if (tabName === 'dashboard') {
+        loadDashboard();
+    }
+}
+
+// Dashboard
+async function loadDashboard() {
+    const grid = document.getElementById('dashboardGrid');
+    grid.innerHTML = '<div class="dashboard-loading">Loading projects...</div>';
+    
+    try {
+        const [projectsRes, subtasksRes] = await Promise.all([
+            fetch(`${API_URL}/projects`),
+            fetch(`${API_URL}/subtasks`)
+        ]);
+        
+        const allProjects = await projectsRes.json();
+        const allSubtasks = await subtasksRes.json();
+        
+        grid.innerHTML = allProjects.map(project => {
+            const projectSubtasks = allSubtasks.filter(s => s.project_id === project.id);
+            const completedSubtasks = projectSubtasks.filter(s => s.status === 'done').length;
+            const progress = projectSubtasks.length > 0 ? Math.round((completedSubtasks / projectSubtasks.length) * 100) : 0;
+            
+            return `
+                <div class="dashboard-card" onclick="openTimelineModal(${project.id})">
+                    <div class="dashboard-card-header">
+                        <span class="dashboard-card-title">${project.name}</span>
+                        <span class="dashboard-card-status">${formatStatus(project.status)}</span>
+                    </div>
+                    <div class="dashboard-card-owner">
+                        <span class="card-owner owner-${project.owner}">${project.owner}</span>
+                        <span class="card-priority priority-${project.priority}">${project.priority}</span>
+                    </div>
+                    <div class="dashboard-card-progress">
+                        <div class="subtask-progress-bar">
+                            <div class="subtask-progress-fill" style="width: ${progress}%"></div>
+                        </div>
+                        <div class="subtask-progress-text">${progress}% complete</div>
+                    </div>
+                    <div class="dashboard-card-stats">
+                        <span>📝 ${projectSubtasks.length} sub-tasks</span>
+                        <span>✅ ${completedSubtasks} done</span>
+                    </div>
+                    <div class="dashboard-card-action">
+                        <span style="color: #667eea; font-size: 0.9rem;">Click for AI Timeline Analysis →</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        console.error('Failed to load dashboard:', err);
+        grid.innerHTML = '<div class="dashboard-loading">Failed to load dashboard</div>';
+    }
+}
+
+async function openTimelineModal(projectId) {
+    const content = document.getElementById('timelineContent');
+    content.innerHTML = '<div class="dashboard-loading">🤖 AI is analyzing project journey...</div>';
+    document.getElementById('timelineModal').style.display = 'block';
+    
+    try {
+        const res = await fetch(`${API_URL}/dashboard/timeline/${projectId}`);
+        const data = await res.json();
+        
+        if (data.error) {
+            content.innerHTML = '<div class="dashboard-loading">Failed to generate timeline. Please try again.</div>';
+            return;
         }
+        
+        const { timeline, project, subtasks } = data;
+        const progress = timeline.progressPercentage || 0;
+        
+        content.innerHTML = `
+            <div class="timeline-header">
+                <h2>📊 ${project.name} - Project Journey</h2>
+                <div class="detail-meta">
+                    <span class="card-owner owner-${project.owner}">${project.owner}</span>
+                    <span class="card-priority priority-${project.priority}">${project.priority}</span>
+                    <span>${formatStatus(project.status)}</span>
+                </div>
+            </div>
+            
+            <div class="timeline-summary">
+                <h4>🤖 AI Journey Summary</h4>
+                <p>${timeline.journeySummary || 'No summary available.'}</p>
+            </div>
+            
+            <div class="timeline-progress">
+                <div class="timeline-progress-circle" style="--progress: ${progress}">
+                    <span>${progress}%</span>
+                </div>
+                <div class="timeline-progress-info">
+                    <h4>Current Phase</h4>
+                    <p>${timeline.currentPhase || 'In progress'}</p>
+                    ${timeline.estimatedCompletion ? `<p style="color: rgba(255,255,255,0.6);">Est. completion: ${timeline.estimatedCompletion}</p>` : ''}
+                </div>
+            </div>
+            
+            ${timeline.keyMilestones && timeline.keyMilestones.length > 0 ? `
+            <div class="timeline-milestones">
+                <h3>🏆 Key Milestones</h3>
+                ${timeline.keyMilestones.map(m => `
+                    <div class="milestone-item">
+                        <div class="milestone-date">${m.date || 'N/A'}</div>
+                        <div class="milestone-content">
+                            <div class="milestone-event">${m.event}</div>
+                            <div class="milestone-significance">${m.significance || ''}</div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            ` : ''}
+            
+            <div class="timeline-insights">
+                ${timeline.insights && timeline.insights.length > 0 ? `
+                <div class="timeline-insights-section">
+                    <h4>💡 Insights</h4>
+                    <ul>
+                        ${timeline.insights.map(i => `<li>${i}</li>`).join('')}
+                    </ul>
+                </div>
+                ` : ''}
+                
+                ${timeline.risks && timeline.risks.length > 0 ? `
+                <div class="timeline-insights-section">
+                    <h4>⚠️ Risks</h4>
+                    <ul>
+                        ${timeline.risks.map(r => `<li>${r}</li>`).join('')}
+                    </ul>
+                </div>
+                ` : ''}
+                
+                ${timeline.recommendations && timeline.recommendations.length > 0 ? `
+                <div class="timeline-insights-section" style="grid-column: 1 / -1;">
+                    <h4>📋 Recommendations</h4>
+                    <ul>
+                        ${timeline.recommendations.map(r => `<li>${r}</li>`).join('')}
+                    </ul>
+                </div>
+                ` : ''}
+            </div>
+        `;
+    } catch (err) {
+        console.error('Failed to load timeline:', err);
+        content.innerHTML = '<div class="dashboard-loading">Failed to connect. Is the server running?</div>';
     }
 }
 
