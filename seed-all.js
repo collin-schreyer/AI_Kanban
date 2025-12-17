@@ -203,6 +203,40 @@ const allProjectsData = [
       {name: "Terraform GovCloud deployment", status: "todo", assignee: "Collin"},
       {name: "Security review & FedRAMP documentation", status: "todo", assignee: "Collin"}
     ]
+  },
+  {
+    name: "VA - AI EEOC Demo",
+    description: "Carl and Collin working with Brad's group to put together an impressive AI demo",
+    owner: "Carl",
+    status: "inprogress",
+    priority: "high",
+    dueDate: "2025-12-25",
+    tags: ["urgent", "VA", "demo"],
+    subtasks: [
+      {name: "Demo preparation", status: "inprogress", assignee: "Collin", dueDate: "2025-12-20"}
+    ]
+  },
+  {
+    name: "B&A AI Center of Excellence",
+    description: "Unified AI platform showcasing all B&A AI capabilities on GovCloud infrastructure",
+    owner: "Carl",
+    status: "inprogress",
+    priority: "high",
+    tags: ["platform", "govcloud", "showcase"],
+    subtasks: [
+      {name: "GovCloud Infrastructure Setup", description: "Deploy Phase 0 infrastructure on AWS GovCloud - VPCs, NAT Gateway, Jump Box, CloudTrail, GuardDuty", status: "done", assignee: "Collin", dueDate: "2025-11-19"},
+      {name: "Website Design & Development", description: "Build responsive landing page with login, hero section, services, capabilities, and contact form", status: "done", assignee: "Collin", dueDate: "2025-12-10"},
+      {name: "CloudFront HTTPS Setup", description: "Configure CloudFront CDN in commercial AWS for HTTPS access to GovCloud S3 bucket", status: "done", assignee: "Collin", dueDate: "2025-12-12"},
+      {name: "AI Projects Showcase", description: "Create horizontal scrolling carousel displaying all 11 B&A AI tools with live demo links", status: "done", assignee: "Collin", dueDate: "2025-12-16"},
+      {name: "GTM Strategy Section", description: "Add go-to-market messaging, differentiators, and security architecture graphic", status: "done", assignee: "Collin", dueDate: "2025-12-16"},
+      {name: "USCIS Agent Assist Integration", description: "Connect USCIS contact center demo to COE with unified navigation", status: "inprogress", assignee: "Collin", dueDate: "2025-12-20"},
+      {name: "K-Fund Tool Integration", description: "Link K-Fund compliance assistant to COE platform", status: "inprogress", assignee: "Collin", dueDate: "2025-12-20"},
+      {name: "HR Intelligence Integration", description: "Connect HR recruiting platform to COE with consistent branding", status: "inprogress", assignee: "Collin", dueDate: "2025-12-20"},
+      {name: "Unified Authentication (SSO)", description: "Implement single sign-on across all AI tools using agency AD/IAM integration", status: "todo", assignee: "Collin", dueDate: "2025-12-27"},
+      {name: "Executive Analytics Dashboard", description: "Add dashboard showing usage metrics and ROI across all integrated AI tools", status: "todo", assignee: "Collin", dueDate: "2026-01-10"},
+      {name: "Demo Video Production", description: "Record walkthrough video showcasing unified AI capabilities for sales presentations", status: "todo", assignee: "Collin", dueDate: "2026-01-15"},
+      {name: "Custom Domain Setup", description: "Configure ai.ba.com domain with ACM certificate and Route 53 DNS", status: "todo", assignee: "Collin"}
+    ]
   }
 ];
 

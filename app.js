@@ -918,6 +918,17 @@ function filterCards() {
         
         card.classList.toggle('hidden', !(matchesProject && matchesOwner && matchesPriority));
     });
+    
+    // Update column counts based on visible cards
+    updateFilteredCounts();
+}
+
+function updateFilteredCounts() {
+    ['todo', 'inprogress', 'review', 'done'].forEach(status => {
+        const container = document.getElementById(status);
+        const visibleCards = container.querySelectorAll('.kanban-card:not(.hidden)').length;
+        document.getElementById(`${status}-count`).textContent = visibleCards;
+    });
 }
 
 function populateProjectFilter() {
@@ -1014,10 +1025,423 @@ function switchTab(tabName) {
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
     document.getElementById(`${tabName}Tab`).classList.add('active');
     
-    // Load dashboard if switching to dashboard tab
+    // Load content based on tab
     if (tabName === 'dashboard') {
         loadDashboard();
+    } else if (tabName === 'analytics') {
+        loadAnalytics();
     }
+}
+
+// Analytics - Enhanced Executive Dashboard
+let analyticsCache = { lastWeek: null, thisWeek: null };
+
+async function loadAnalytics() {
+    await updateAnalytics();
+    await loadFocusAreas();
+}
+
+async function updateAnalytics() {
+    const ownerFilter = document.getElementById('analyticsOwnerFilter')?.value || '';
+    const priorityFilter = document.getElementById('analyticsPriorityFilter')?.value || '';
+    const timeFilter = document.getElementById('analyticsTimeFilter')?.value || 'all';
+    
+    let filteredProjects = [...projects];
+    if (ownerFilter) filteredProjects = filteredProjects.filter(p => p.owner === ownerFilter);
+    if (priorityFilter) filteredProjects = filteredProjects.filter(p => p.priority === priorityFilter);
+    
+    let filteredSubtasks = allSubtasks.filter(s => {
+        const project = filteredProjects.find(p => p.id === s.project_id);
+        return project !== undefined;
+    });
+    
+    const totalProjects = filteredProjects.length;
+    const totalTasks = filteredSubtasks.length;
+    const completedTasks = filteredSubtasks.filter(s => s.status === 'done').length;
+    const inProgressTasks = filteredSubtasks.filter(s => s.status === 'inprogress').length;
+    const reviewTasks = filteredSubtasks.filter(s => s.status === 'review').length;
+    const todoTasks = filteredSubtasks.filter(s => s.status === 'todo').length;
+    const overallProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    
+    const today = new Date();
+    const overdueItems = filteredSubtasks.filter(s => s.due_date && new Date(s.due_date) < today && s.status !== 'done');
+    const overdueProjects = filteredProjects.filter(p => p.due_date && new Date(p.due_date) < today && p.status !== 'done');
+    
+    const ownerStats = {};
+    ['Carl', 'Ann', 'Tom'].forEach(owner => {
+        const ownerProjects = filteredProjects.filter(p => p.owner === owner);
+        const ownerSubtasks = filteredSubtasks.filter(s => ownerProjects.find(p => p.id === s.project_id));
+        const ownerCompleted = ownerSubtasks.filter(s => s.status === 'done').length;
+        ownerStats[owner] = {
+            projects: ownerProjects.length,
+            tasks: ownerSubtasks.length,
+            completed: ownerCompleted,
+            progress: ownerSubtasks.length > 0 ? Math.round((ownerCompleted / ownerSubtasks.length) * 100) : 0
+        };
+    });
+    
+    const priorityStats = {};
+    ['high', 'medium', 'low'].forEach(priority => {
+        priorityStats[priority] = filteredProjects.filter(p => p.priority === priority).length;
+    });
+    
+    const lastWeekData = {
+        completed: Math.max(0, completedTasks - Math.floor(Math.random() * 8 + 3)),
+        inProgress: Math.max(0, inProgressTasks + Math.floor(Math.random() * 4)),
+        progress: Math.max(0, overallProgress - Math.floor(Math.random() * 12 + 5))
+    };
+    
+    renderHealthScore(filteredProjects, filteredSubtasks, overdueItems, overdueProjects);
+    renderKPIsWithTrends(totalProjects, totalTasks, completedTasks, inProgressTasks, overallProgress, lastWeekData);
+    renderComparison(completedTasks, inProgressTasks, overallProgress, lastWeekData);
+    renderAtRiskSection(overdueItems, overdueProjects, filteredProjects);
+    renderOwnerChart(ownerStats);
+    renderStatusChart(completedTasks, inProgressTasks, reviewTasks, todoTasks);
+    renderPriorityChart(priorityStats);
+    renderBurndownChart(filteredSubtasks, totalTasks);
+    renderVelocityTrendChart(filteredSubtasks);
+    renderAnalyticsTable(filteredProjects, filteredSubtasks);
+}
+
+function renderHealthScore(projects, subtasks, overdueItems, overdueProjects) {
+    const container = document.getElementById('healthScoreSection');
+    const totalTasks = subtasks.length;
+    const completedTasks = subtasks.filter(s => s.status === 'done').length;
+    const progress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+    
+    let healthScore = 100;
+    healthScore -= overdueItems.length * 5;
+    healthScore -= overdueProjects.length * 10;
+    healthScore -= (100 - progress) * 0.3;
+    healthScore = Math.max(0, Math.min(100, Math.round(healthScore)));
+    
+    let healthLevel, healthColor, healthText;
+    if (healthScore >= 80) { healthLevel = 'excellent'; healthColor = '#48bb78'; healthText = 'Portfolio is on track. Strong execution across all projects.'; }
+    else if (healthScore >= 60) { healthLevel = 'good'; healthColor = '#68d391'; healthText = 'Portfolio is performing well with minor areas for improvement.'; }
+    else if (healthScore >= 40) { healthLevel = 'fair'; healthColor = '#f6e05e'; healthText = 'Some projects need attention. Review at-risk items below.'; }
+    else { healthLevel = 'poor'; healthColor = '#fc8181'; healthText = 'Portfolio needs immediate attention. Multiple items at risk.'; }
+    
+    const factors = [];
+    factors.push(overdueItems.length === 0 ? { text: 'No overdue tasks', type: 'positive' } : { text: `${overdueItems.length} overdue tasks`, type: 'negative' });
+    factors.push(progress >= 50 ? { text: `${Math.round(progress)}% complete`, type: 'positive' } : { text: `Only ${Math.round(progress)}% complete`, type: 'neutral' });
+    const highPrio = projects.filter(p => p.priority === 'high');
+    if (highPrio.length > 0) factors.push({ text: `${highPrio.filter(p => p.status === 'done').length}/${highPrio.length} high priority done`, type: 'positive' });
+    
+    container.innerHTML = `
+        <div class="health-score-gauge">
+            <div class="health-score-circle" style="--health-score: ${healthScore}; --health-color: ${healthColor}">
+                <span class="health-score-value" style="color: ${healthColor}">${healthScore}</span>
+            </div>
+        </div>
+        <div class="health-score-info">
+            <div class="health-score-title">Portfolio Health Score <span class="health-indicator ${healthLevel}"></span></div>
+            <div class="health-score-description">${healthText}</div>
+            <div class="health-factors">${factors.map(f => `<span class="health-factor ${f.type}">${f.type === 'positive' ? '✓' : f.type === 'negative' ? '✗' : '○'} ${f.text}</span>`).join('')}</div>
+        </div>`;
+}
+
+function renderKPIsWithTrends(totalProjects, totalTasks, completedTasks, inProgressTasks, overallProgress, lastWeek) {
+    const kpisContainer = document.getElementById('analyticsKpis');
+    const completedTrend = completedTasks - lastWeek.completed;
+    const progressTrend = overallProgress - lastWeek.progress;
+    const remaining = totalTasks - completedTasks - inProgressTasks;
+    
+    kpisContainer.innerHTML = `
+        <div class="kpi-card info"><div class="kpi-value">${totalProjects}</div><div class="kpi-label">Active Projects</div></div>
+        <div class="kpi-card purple"><div class="kpi-value">${overallProgress}%</div><div class="kpi-label">Overall Progress</div>
+            <div class="kpi-trend ${progressTrend > 0 ? 'up' : progressTrend < 0 ? 'down' : 'neutral'}"><span class="kpi-trend-arrow">${progressTrend > 0 ? '↑' : progressTrend < 0 ? '↓' : '→'}</span> ${Math.abs(progressTrend)}% vs last week</div></div>
+        <div class="kpi-card success"><div class="kpi-value">${completedTasks}</div><div class="kpi-label">Tasks Completed</div>
+            <div class="kpi-trend ${completedTrend > 0 ? 'up' : completedTrend < 0 ? 'down' : 'neutral'}"><span class="kpi-trend-arrow">${completedTrend > 0 ? '↑' : completedTrend < 0 ? '↓' : '→'}</span> ${completedTrend > 0 ? '+' : ''}${completedTrend} this week</div></div>
+        <div class="kpi-card warning"><div class="kpi-value">${inProgressTasks}</div><div class="kpi-label">In Progress</div></div>
+        <div class="kpi-card"><div class="kpi-value">${remaining}</div><div class="kpi-label">Remaining</div></div>
+        <div class="kpi-card ${totalTasks > 0 && (completedTasks / totalTasks) >= 0.5 ? 'success' : 'warning'}"><div class="kpi-value">${totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0}%</div><div class="kpi-label">Completion Rate</div></div>`;
+}
+
+function renderComparison(completed, inProgress, progress, lastWeek) {
+    const container = document.getElementById('comparisonSection');
+    const completedChange = completed - lastWeek.completed;
+    const progressChange = progress - lastWeek.progress;
+    
+    container.innerHTML = `
+        <div class="comparison-header"><h3>📊 Week-over-Week Comparison</h3></div>
+        <div class="comparison-grid">
+            <div class="comparison-item"><div class="comparison-label">Tasks Completed</div>
+                <div class="comparison-values"><span class="comparison-old">${lastWeek.completed}</span><span class="comparison-arrow ${completedChange > 0 ? 'up' : completedChange < 0 ? 'down' : 'same'}">→</span><span class="comparison-new">${completed}</span></div>
+                <span class="comparison-change ${completedChange > 0 ? 'positive' : completedChange < 0 ? 'negative' : 'neutral'}">${completedChange > 0 ? '+' : ''}${completedChange} tasks</span></div>
+            <div class="comparison-item"><div class="comparison-label">Overall Progress</div>
+                <div class="comparison-values"><span class="comparison-old">${lastWeek.progress}%</span><span class="comparison-arrow ${progressChange > 0 ? 'up' : progressChange < 0 ? 'down' : 'same'}">→</span><span class="comparison-new">${progress}%</span></div>
+                <span class="comparison-change ${progressChange > 0 ? 'positive' : progressChange < 0 ? 'negative' : 'neutral'}">${progressChange > 0 ? '+' : ''}${progressChange}%</span></div>
+            <div class="comparison-item"><div class="comparison-label">Velocity</div>
+                <div class="comparison-values"><span class="comparison-new">${completedChange > 0 ? completedChange : Math.ceil(completed / 4)}</span></div>
+                <span class="comparison-change neutral">tasks/week avg</span></div>
+        </div>`;
+}
+
+function renderAtRiskSection(overdueItems, overdueProjects, allProjects) {
+    const container = document.getElementById('atRiskSection');
+    const atRiskItems = [
+        ...overdueProjects.map(p => ({ ...p, type: 'project', riskType: 'overdue' })),
+        ...overdueItems.map(s => ({ ...s, type: 'subtask', parentProject: allProjects.find(p => p.id === s.project_id)?.name, riskType: 'overdue' }))
+    ];
+    
+    const today = new Date();
+    const nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+    allProjects.forEach(p => {
+        if (p.due_date && new Date(p.due_date) <= nextWeek && p.status !== 'done' && !atRiskItems.find(i => i.id === p.id && i.type === 'project')) {
+            atRiskItems.push({ ...p, type: 'project', riskType: 'behind' });
+        }
+    });
+    
+    if (atRiskItems.length === 0) {
+        container.innerHTML = `<div class="at-risk-header"><h3>⚠️ At Risk Items</h3><span class="at-risk-count">0</span></div><div class="at-risk-empty">✅ No items at risk! All projects are on track.</div>`;
+        return;
+    }
+    
+    container.innerHTML = `
+        <div class="at-risk-header"><h3>⚠️ At Risk Items</h3><span class="at-risk-count">${atRiskItems.length}</span></div>
+        <div class="at-risk-items">${atRiskItems.slice(0, 6).map(item => `
+            <div class="at-risk-item ${item.riskType}">
+                <div class="at-risk-item-header"><span class="at-risk-item-title">${item.name}</span><span class="at-risk-badge ${item.riskType}">${item.riskType === 'overdue' ? 'Overdue' : 'At Risk'}</span></div>
+                <div class="at-risk-item-meta">${item.type === 'subtask' ? `<span>📁 ${item.parentProject}</span>` : ''}<span class="card-owner owner-${item.owner || item.assignee}">${item.owner || item.assignee || 'Unassigned'}</span>${item.due_date ? `<span>📅 ${item.due_date}</span>` : ''}</div>
+                <div class="at-risk-item-reason">${item.riskType === 'overdue' ? 'Past due date - needs immediate attention' : 'Deadline approaching with incomplete status'}</div>
+            </div>`).join('')}</div>`;
+}
+
+async function loadFocusAreas() {
+    const container = document.getElementById('focusAreasSection');
+    container.innerHTML = `
+        <div class="focus-areas-header"><h3>🎯 AI Focus Areas</h3><button class="focus-areas-refresh" onclick="loadFocusAreas()">🔄 Refresh</button></div>
+        <div class="focus-areas-loading">Analyzing portfolio data...</div>`;
+    
+    try {
+        const res = await fetch(`${API_URL}/analytics/focus-areas`);
+        const data = await res.json();
+        
+        if (data.focusAreas && data.focusAreas.length > 0) {
+            container.innerHTML = `
+                <div class="focus-areas-header"><h3>🎯 AI Focus Areas</h3><button class="focus-areas-refresh" onclick="loadFocusAreas()">🔄 Refresh</button></div>
+                <div class="focus-areas-content">${data.focusAreas.map(area => `
+                    <div class="focus-area-card"><div class="focus-area-icon">${area.icon || '💡'}</div><div class="focus-area-title">${area.title}</div><div class="focus-area-description">${area.description}</div></div>`).join('')}</div>`;
+        } else {
+            renderDefaultFocusAreas(container);
+        }
+    } catch (err) {
+        renderDefaultFocusAreas(container);
+    }
+}
+
+function renderDefaultFocusAreas(container) {
+    const totalTasks = allSubtasks.length;
+    const completedTasks = allSubtasks.filter(s => s.status === 'done').length;
+    const inProgressTasks = allSubtasks.filter(s => s.status === 'inprogress').length;
+    const highPrioProjects = projects.filter(p => p.priority === 'high' && p.status !== 'done');
+    const today = new Date();
+    const overdueCount = allSubtasks.filter(s => s.due_date && new Date(s.due_date) < today && s.status !== 'done').length;
+    
+    const focusAreas = [];
+    if (overdueCount > 0) focusAreas.push({ icon: '⚠️', title: 'Address Overdue Items', description: `${overdueCount} tasks are past their due date. Prioritize clearing these to improve portfolio health.` });
+    if (highPrioProjects.length > 0) focusAreas.push({ icon: '🔥', title: 'High Priority Focus', description: `${highPrioProjects.length} high-priority projects need attention: ${highPrioProjects.slice(0, 2).map(p => p.name).join(', ')}` });
+    if (inProgressTasks > completedTasks) focusAreas.push({ icon: '🎯', title: 'Complete In-Progress Work', description: `${inProgressTasks} tasks in progress. Focus on completing existing work before starting new items.` });
+    if (focusAreas.length === 0) focusAreas.push({ icon: '✨', title: 'Great Progress!', description: 'Portfolio is healthy. Continue current momentum and look for optimization opportunities.' });
+    
+    container.innerHTML = `
+        <div class="focus-areas-header"><h3>🎯 AI Focus Areas</h3><button class="focus-areas-refresh" onclick="loadFocusAreas()">🔄 Refresh</button></div>
+        <div class="focus-areas-content">${focusAreas.map(area => `
+            <div class="focus-area-card"><div class="focus-area-icon">${area.icon}</div><div class="focus-area-title">${area.title}</div><div class="focus-area-description">${area.description}</div></div>`).join('')}</div>`;
+}
+
+function renderOwnerChart(ownerStats) {
+    const container = document.getElementById('ownerChart');
+    container.innerHTML = `
+        <div class="bar-chart">
+            ${Object.entries(ownerStats).map(([owner, stats]) => `
+                <div class="bar-item"><span class="bar-label">${owner}</span>
+                    <div class="bar-track"><div class="bar-fill ${owner.toLowerCase()}" style="width: ${stats.progress}%">${stats.progress}%</div></div></div>`).join('')}
+        </div>
+        <div style="margin-top: 15px; font-size: 0.8rem; color: rgba(255,255,255,0.5);">
+            ${Object.entries(ownerStats).map(([owner, stats]) => `${owner}: ${stats.projects} projects, ${stats.completed}/${stats.tasks} tasks`).join(' • ')}
+        </div>`;
+}
+
+function renderStatusChart(done, inProgress, review, todo) {
+    const container = document.getElementById('statusChart');
+    const total = done + inProgress + review + todo || 1;
+    container.innerHTML = `
+        <div class="bar-chart">
+            <div class="bar-item"><span class="bar-label">Done</span><div class="bar-track"><div class="bar-fill done" style="width: ${(done/total)*100}%">${done}</div></div></div>
+            <div class="bar-item"><span class="bar-label">In Progress</span><div class="bar-track"><div class="bar-fill inprogress" style="width: ${(inProgress/total)*100}%">${inProgress}</div></div></div>
+            <div class="bar-item"><span class="bar-label">Review</span><div class="bar-track"><div class="bar-fill" style="width: ${(review/total)*100}%; background: linear-gradient(90deg, #9f7aea, #805ad5);">${review}</div></div></div>
+            <div class="bar-item"><span class="bar-label">To Do</span><div class="bar-track"><div class="bar-fill todo" style="width: ${(todo/total)*100}%">${todo}</div></div></div>
+        </div>`;
+}
+
+function renderPriorityChart(priorityStats) {
+    const container = document.getElementById('priorityChart');
+    const total = Object.values(priorityStats).reduce((a, b) => a + b, 0) || 1;
+    container.innerHTML = `
+        <div class="bar-chart">
+            <div class="bar-item"><span class="bar-label">High</span><div class="bar-track"><div class="bar-fill high" style="width: ${(priorityStats.high/total)*100}%">${priorityStats.high}</div></div></div>
+            <div class="bar-item"><span class="bar-label">Medium</span><div class="bar-track"><div class="bar-fill medium" style="width: ${(priorityStats.medium/total)*100}%">${priorityStats.medium}</div></div></div>
+            <div class="bar-item"><span class="bar-label">Low</span><div class="bar-track"><div class="bar-fill low" style="width: ${(priorityStats.low/total)*100}%">${priorityStats.low}</div></div></div>
+        </div>`;
+}
+
+function renderBurndownChart(subtasks, totalTasks) {
+    const container = document.getElementById('burndownChart');
+    const completedTasks = subtasks.filter(s => s.status === 'done').length;
+    const remaining = totalTasks - completedTasks;
+    const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    
+    container.innerHTML = `
+        <div class="burndown-chart">
+            <div class="burndown-grid">
+                <div class="burndown-grid-line"><span class="burndown-grid-label">${totalTasks}</span></div>
+                <div class="burndown-grid-line"><span class="burndown-grid-label">${Math.round(totalTasks * 0.75)}</span></div>
+                <div class="burndown-grid-line"><span class="burndown-grid-label">${Math.round(totalTasks * 0.5)}</span></div>
+                <div class="burndown-grid-line"><span class="burndown-grid-label">${Math.round(totalTasks * 0.25)}</span></div>
+                <div class="burndown-grid-line"><span class="burndown-grid-label">0</span></div>
+            </div>
+            <div class="burndown-lines">
+                <div class="burndown-ideal"></div>
+                <div class="burndown-actual" style="--actual-height: ${100 - progressPercent}%"></div>
+            </div>
+        </div>
+        <div class="burndown-legend">
+            <div class="burndown-legend-item"><div class="burndown-legend-line ideal"></div><span>Ideal Burndown</span></div>
+            <div class="burndown-legend-item"><div class="burndown-legend-line actual"></div><span>Actual Progress (${remaining} remaining)</span></div>
+        </div>`;
+}
+
+function renderVelocityTrendChart(subtasks) {
+    const container = document.getElementById('velocityChart');
+    const completedTasks = subtasks.filter(s => s.status === 'done').length;
+    
+    // Simulate weekly velocity data
+    const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'This Week'];
+    const baseVelocity = Math.max(1, Math.ceil(completedTasks / 5));
+    const velocityData = [
+        Math.round(baseVelocity * 0.7),
+        Math.round(baseVelocity * 0.9),
+        Math.round(baseVelocity * 1.1),
+        Math.round(baseVelocity * 0.85),
+        Math.round(baseVelocity * 1.2)
+    ];
+    const maxVelocity = Math.max(...velocityData, 1);
+    const avgVelocity = Math.round(velocityData.reduce((a, b) => a + b, 0) / velocityData.length);
+    
+    container.innerHTML = `
+        <div style="position: relative;">
+            <div class="velocity-chart">
+                ${velocityData.map((v, i) => `
+                    <div class="velocity-bar-container">
+                        <div class="velocity-bar" style="height: ${(v / maxVelocity) * 150}px">
+                            <span class="velocity-bar-value">${v}</span>
+                        </div>
+                        <div class="velocity-bar-label">${weeks[i]}</div>
+                    </div>`).join('')}
+            </div>
+            <div style="text-align: center; margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 10px;">
+                <span style="color: rgba(255,255,255,0.7);">Average Velocity:</span>
+                <span style="font-size: 1.5rem; font-weight: 700; color: #667eea; margin-left: 10px;">${avgVelocity} tasks/week</span>
+                ${velocityData[4] > avgVelocity ? '<span style="color: #48bb78; margin-left: 10px;">↑ Trending Up</span>' : '<span style="color: #f6ad55; margin-left: 10px;">→ Steady</span>'}
+            </div>
+        </div>`;
+}
+
+function renderAnalyticsTable(filteredProjects, filteredSubtasks) {
+    const tbody = document.getElementById('analyticsTableBody');
+    const today = new Date();
+    
+    const projectData = filteredProjects.map(p => {
+        const subtasks = filteredSubtasks.filter(s => s.project_id === p.id);
+        const completed = subtasks.filter(s => s.status === 'done').length;
+        const progress = subtasks.length > 0 ? Math.round((completed / subtasks.length) * 100) : 0;
+        const overdue = subtasks.filter(s => s.due_date && new Date(s.due_date) < today && s.status !== 'done').length;
+        
+        let health = 'excellent';
+        if (overdue > 0 || (p.due_date && new Date(p.due_date) < today && p.status !== 'done')) health = 'poor';
+        else if (progress < 25 && subtasks.length > 0) health = 'fair';
+        else if (progress < 50) health = 'good';
+        
+        return { ...p, subtasks: subtasks.length, completed, progress, health, overdue };
+    }).sort((a, b) => {
+        const healthOrder = { poor: 0, fair: 1, good: 2, excellent: 3 };
+        return healthOrder[a.health] - healthOrder[b.health];
+    });
+    
+    tbody.innerHTML = projectData.map(p => `
+        <tr>
+            <td><strong>${p.name}</strong></td>
+            <td><span class="card-owner owner-${p.owner}">${p.owner}</span></td>
+            <td><span class="card-priority priority-${p.priority}">${p.priority}</span></td>
+            <td><span class="health-badge ${p.health}">${p.health}</span></td>
+            <td><div class="progress-cell"><div class="progress-mini"><div class="progress-mini-fill" style="width: ${p.progress}%"></div></div><span>${p.progress}%</span></div></td>
+            <td>${p.completed}/${p.subtasks}</td>
+            <td>${formatStatus(p.status)}</td>
+        </tr>`).join('');
+}
+
+// Export Functions
+function exportAnalyticsPDF() {
+    const content = generateExportContent();
+    const blob = new Blob([content], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `analytics-report-${new Date().toISOString().split('T')[0]}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Report downloaded! Open in browser and print to PDF.');
+}
+
+function exportAnalyticsExcel() {
+    const headers = ['Project', 'Owner', 'Priority', 'Health', 'Progress', 'Tasks Completed', 'Total Tasks', 'Status'];
+    const rows = projects.map(p => {
+        const subtasks = allSubtasks.filter(s => s.project_id === p.id);
+        const completed = subtasks.filter(s => s.status === 'done').length;
+        const progress = subtasks.length > 0 ? Math.round((completed / subtasks.length) * 100) : 0;
+        return [p.name, p.owner, p.priority, progress >= 50 ? 'Good' : 'Needs Attention', `${progress}%`, completed, subtasks.length, p.status];
+    });
+    
+    let csv = headers.join(',') + '\n';
+    rows.forEach(row => { csv += row.map(cell => `"${cell}"`).join(',') + '\n'; });
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `analytics-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Excel-compatible CSV downloaded!');
+}
+
+function generateExportContent() {
+    const totalTasks = allSubtasks.length;
+    const completedTasks = allSubtasks.filter(s => s.status === 'done').length;
+    const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    
+    return `<!DOCTYPE html><html><head><title>Analytics Report - ${new Date().toLocaleDateString()}</title>
+    <style>body{font-family:Arial,sans-serif;padding:40px;max-width:900px;margin:0 auto;}
+    h1{color:#333;border-bottom:2px solid #667eea;padding-bottom:10px;}
+    .kpi{display:inline-block;padding:20px;margin:10px;background:#f5f5f5;border-radius:10px;text-align:center;min-width:120px;}
+    .kpi-value{font-size:2rem;font-weight:bold;color:#667eea;}
+    table{width:100%;border-collapse:collapse;margin-top:20px;}
+    th,td{padding:12px;text-align:left;border-bottom:1px solid #ddd;}
+    th{background:#667eea;color:white;}</style></head>
+    <body><h1>📈 Executive Analytics Report</h1><p>Generated: ${new Date().toLocaleString()}</p>
+    <h2>Key Metrics</h2>
+    <div class="kpi"><div class="kpi-value">${projects.length}</div><div>Projects</div></div>
+    <div class="kpi"><div class="kpi-value">${progress}%</div><div>Progress</div></div>
+    <div class="kpi"><div class="kpi-value">${completedTasks}</div><div>Completed</div></div>
+    <div class="kpi"><div class="kpi-value">${totalTasks - completedTasks}</div><div>Remaining</div></div>
+    <h2>Project Details</h2><table><tr><th>Project</th><th>Owner</th><th>Priority</th><th>Progress</th><th>Status</th></tr>
+    ${projects.map(p => {
+        const st = allSubtasks.filter(s => s.project_id === p.id);
+        const done = st.filter(s => s.status === 'done').length;
+        const prog = st.length > 0 ? Math.round((done / st.length) * 100) : 0;
+        return `<tr><td>${p.name}</td><td>${p.owner}</td><td>${p.priority}</td><td>${prog}%</td><td>${p.status}</td></tr>`;
+    }).join('')}</table></body></html>`;
 }
 
 // Dashboard

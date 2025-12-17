@@ -10,8 +10,10 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('.'));
 
-// Initialize SQLite database
-const db = new Database('kanban.db');
+// Initialize SQLite database - use persistent disk on Render, local file otherwise
+const dbPath = process.env.RENDER ? '/data/kanban.db' : 'kanban.db';
+const db = new Database(dbPath);
+console.log(`Database path: ${dbPath}`);
 
 // Initialize OpenAI
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -97,13 +99,13 @@ if (projectCount.count === 0) {
   const { allProjectsData } = require('./seed-all.js');
   
   const insertProject = db.prepare(`
-    INSERT INTO projects (name, description, owner, status, priority, tags, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO projects (name, description, owner, status, priority, tags, due_date, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   
   const insertSubtask = db.prepare(`
-    INSERT INTO subtasks (project_id, name, description, status, assignee, created_at, completed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO subtasks (project_id, name, description, status, assignee, due_date, created_at, completed_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   
   const insertHistory = db.prepare(`
@@ -119,6 +121,7 @@ if (projectCount.count === 0) {
       project.status || 'inprogress',
       project.priority || 'medium',
       JSON.stringify(project.tags || []),
+      project.dueDate || null,
       new Date().toISOString()
     );
     
@@ -133,6 +136,7 @@ if (projectCount.count === 0) {
         subtask.description || '',
         subtask.status,
         subtask.assignee,
+        subtask.dueDate || null,
         new Date().toISOString(),
         completedAt
       );
@@ -142,6 +146,14 @@ if (projectCount.count === 0) {
   });
   
   console.log(`✅ Seeded ${allProjectsData.length} projects with subtasks\n`);
+  
+  // Seed initial comments
+  const insertComment = db.prepare('INSERT INTO comments (project_id, author, text, created_at) VALUES (?, ?, ?, ?)');
+  const uscisProject = db.prepare("SELECT id FROM projects WHERE name LIKE '%USCIS%'").get();
+  if (uscisProject) {
+    insertComment.run(uscisProject.id, 'Carl', 'Ready to present to the next level at USCIS - Round #2 🎯', new Date().toISOString());
+    console.log('  ✓ Added USCIS comment');
+  }
 }
 
 
@@ -854,6 +866,62 @@ Write in a professional, executive-friendly tone. Emphasize business value and o
     res.status(500).json({ error: 'AI service unavailable' });
   }
 });
+
+// ANALYTICS FOCUS AREAS - AI Generated
+app.get('/api/analytics/focus-areas', async (req, res) => {
+  const projects = db.prepare('SELECT * FROM projects').all();
+  const allSubtasks = db.prepare('SELECT * FROM subtasks').all();
+  
+  const today = new Date();
+  const completedSubtasks = allSubtasks.filter(s => s.status === 'done').length;
+  const totalSubtasks = allSubtasks.length;
+  const overallProgress = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+  const overdueItems = allSubtasks.filter(s => s.due_date && new Date(s.due_date) < today && s.status !== 'done');
+  const highPrioProjects = projects.filter(p => p.priority === 'high' && p.status !== 'done');
+  const inProgressTasks = allSubtasks.filter(s => s.status === 'inprogress').length;
+  
+  const systemPrompt = `You are an executive advisor analyzing an AI project portfolio. Generate 3-4 actionable focus areas for leadership.
+
+PORTFOLIO DATA:
+- ${projects.length} active projects
+- ${completedSubtasks}/${totalSubtasks} tasks completed (${overallProgress}%)
+- ${overdueItems.length} overdue items
+- ${highPrioProjects.length} high-priority projects pending: ${highPrioProjects.map(p => p.name).join(', ')}
+- ${inProgressTasks} tasks currently in progress
+
+Return JSON array of focus areas:
+[{"icon": "emoji", "title": "Short action title", "description": "2-3 sentence recommendation"}]
+
+Focus on: risk mitigation, resource optimization, deadline management, strategic priorities. Be specific and actionable.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: 'Generate focus areas' }],
+      max_tokens: 400
+    });
+    
+    let focusAreas;
+    try {
+      focusAreas = JSON.parse(completion.choices[0].message.content.replace(/```json\n?|\n?```/g, '').trim());
+    } catch (e) {
+      focusAreas = generateDefaultFocusAreas(overdueItems.length, highPrioProjects, inProgressTasks, overallProgress);
+    }
+    res.json({ focusAreas });
+  } catch (error) {
+    console.error('OpenAI error:', error);
+    res.json({ focusAreas: generateDefaultFocusAreas(overdueItems.length, highPrioProjects, inProgressTasks, overallProgress) });
+  }
+});
+
+function generateDefaultFocusAreas(overdueCount, highPrioProjects, inProgressTasks, progress) {
+  const areas = [];
+  if (overdueCount > 0) areas.push({ icon: '⚠️', title: 'Clear Overdue Backlog', description: `${overdueCount} items are past due. Prioritize clearing these to improve portfolio health and team morale.` });
+  if (highPrioProjects.length > 0) areas.push({ icon: '🔥', title: 'High Priority Focus', description: `${highPrioProjects.length} high-priority projects need attention. Consider resource reallocation to accelerate delivery.` });
+  if (inProgressTasks > 10) areas.push({ icon: '🎯', title: 'Reduce Work in Progress', description: `${inProgressTasks} tasks in progress may indicate context switching. Focus on completing existing work.` });
+  if (areas.length === 0) areas.push({ icon: '✨', title: 'Maintain Momentum', description: `Portfolio at ${progress}% completion. Continue current pace and identify optimization opportunities.` });
+  return areas;
+}
 
 // AI INSIGHTS - Optimistic facts about projects
 app.get('/api/insights', async (req, res) => {

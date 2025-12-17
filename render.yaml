@@ -7,3 +7,7 @@ services:
     envVars:
       - key: OPENAI_API_KEY
         sync: false
+    disk:
+      name: kanban-data
+      mountPath: /data
+      sizeGB: 1

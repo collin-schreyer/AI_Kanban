@@ -47,7 +47,8 @@
         <!-- Tab Navigation -->
         <div class="tab-nav">
             <button class="tab-btn active" onclick="switchTab('board')">📋 Board</button>
-            <button class="tab-btn" onclick="switchTab('dashboard')">📊 Dashboard</button>
+            <button class="tab-btn" onclick="switchTab('analytics')">📈 Analytics</button>
+            <button class="tab-btn" onclick="switchTab('dashboard')">🔍 Timelines</button>
             <button class="tab-btn" onclick="switchTab('schedule')">🗓️ Collin's Schedule</button>
         </div>
 
@@ -122,12 +123,114 @@
             </div>
         </div>
 
-        <!-- Dashboard Tab -->
+        <!-- Analytics Tab -->
+        <div id="analyticsTab" class="tab-content">
+            <div class="analytics-container">
+                <div class="analytics-header">
+                    <h2>📈 Executive Analytics</h2>
+                    <div class="analytics-controls">
+                        <div class="analytics-filters">
+                            <select id="analyticsOwnerFilter" onchange="updateAnalytics()">
+                                <option value="">All Owners</option>
+                                <option value="Carl">Carl</option>
+                                <option value="Ann">Ann</option>
+                                <option value="Tom">Tom</option>
+                            </select>
+                            <select id="analyticsPriorityFilter" onchange="updateAnalytics()">
+                                <option value="">All Priorities</option>
+                                <option value="high">High Priority</option>
+                                <option value="medium">Medium Priority</option>
+                                <option value="low">Low Priority</option>
+                            </select>
+                            <select id="analyticsTimeFilter" onchange="updateAnalytics()">
+                                <option value="all">All Time</option>
+                                <option value="week">This Week</option>
+                                <option value="month">This Month</option>
+                                <option value="quarter">This Quarter</option>
+                            </select>
+                        </div>
+                        <div class="analytics-actions">
+                            <button class="btn btn-secondary" onclick="exportAnalyticsPDF()">📄 Export PDF</button>
+                            <button class="btn btn-secondary" onclick="exportAnalyticsExcel()">📊 Export Excel</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Portfolio Health Score -->
+                <div class="health-score-section" id="healthScoreSection">
+                    <!-- Health score will be rendered here -->
+                </div>
+                
+                <!-- KPI Cards with Trends -->
+                <div class="analytics-kpis" id="analyticsKpis">
+                    <!-- KPI cards will be rendered here -->
+                </div>
+                
+                <!-- Week Comparison -->
+                <div class="comparison-section" id="comparisonSection">
+                    <!-- Week comparison will be rendered here -->
+                </div>
+                
+                <!-- At Risk Section -->
+                <div class="at-risk-section" id="atRiskSection">
+                    <!-- At risk items will be rendered here -->
+                </div>
+                
+                <!-- AI Focus Areas -->
+                <div class="focus-areas-section" id="focusAreasSection">
+                    <!-- AI insights will be rendered here -->
+                </div>
+                
+                <div class="analytics-charts">
+                    <div class="analytics-chart-card">
+                        <h3>Progress by Owner</h3>
+                        <div class="chart-container" id="ownerChart"></div>
+                    </div>
+                    <div class="analytics-chart-card">
+                        <h3>Task Status Distribution</h3>
+                        <div class="chart-container" id="statusChart"></div>
+                    </div>
+                    <div class="analytics-chart-card">
+                        <h3>Priority Breakdown</h3>
+                        <div class="chart-container" id="priorityChart"></div>
+                    </div>
+                    <div class="analytics-chart-card full-width">
+                        <h3>📈 Burndown Chart</h3>
+                        <div class="chart-container" id="burndownChart"></div>
+                    </div>
+                    <div class="analytics-chart-card full-width">
+                        <h3>⚡ Velocity Trend</h3>
+                        <div class="chart-container" id="velocityChart"></div>
+                    </div>
+                </div>
+                
+                <div class="analytics-table-section">
+                    <h3>📊 Project Performance</h3>
+                    <table class="analytics-table" id="analyticsTable">
+                        <thead>
+                            <tr>
+                                <th>Project</th>
+                                <th>Owner</th>
+                                <th>Priority</th>
+                                <th>Health</th>
+                                <th>Progress</th>
+                                <th>Tasks</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="analyticsTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Timelines Tab (formerly Dashboard) -->
         <div id="dashboardTab" class="tab-content">
             <div class="dashboard-container">
                 <div class="dashboard-header">
-                    <h2>📊 Project Dashboard</h2>
-                    <p class="dashboard-subtitle">AI-generated timelines and project journey analysis</p>
+                    <h2>🔍 Project Timelines</h2>
+                    <p class="dashboard-subtitle">AI-generated journey analysis for each project</p>
                 </div>
                 <div class="dashboard-grid" id="dashboardGrid">
                     <div class="dashboard-loading">Loading projects...</div>
