@@ -1777,3 +1777,307 @@ body {
 .exec-detail-row.blocker .exec-detail-value {
     color: #fc8181;
 }
+
+
+/* AI Response Formatting */
+.ai-message .ai-project-card {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 10px 0;
+    border-left: 3px solid #667eea;
+}
+
+.ai-message .ai-project-card strong {
+    color: #a78bfa;
+    font-size: 1.05rem;
+}
+
+.ai-message .ai-status {
+    margin: 8px 0 4px 0;
+    font-weight: 500;
+    font-size: 0.85rem;
+}
+
+.ai-message .ai-status.working {
+    color: #f6e05e;
+}
+
+.ai-message .ai-status.next {
+    color: #4299e1;
+}
+
+.ai-message .ai-status.done {
+    color: #48bb78;
+}
+
+.ai-message ul {
+    margin: 5px 0 10px 0;
+    padding-left: 18px;
+}
+
+.ai-message li {
+    margin-bottom: 4px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.ai-message .ai-summary {
+    background: rgba(102, 126, 234, 0.15);
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+
+/* AI Example Questions */
+.ai-examples {
+    padding: 10px 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.ai-examples-label {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-right: 5px;
+}
+
+.ai-example-btn {
+    background: rgba(102, 126, 234, 0.2);
+    border: 1px solid rgba(102, 126, 234, 0.3);
+    color: #a78bfa;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.ai-example-btn:hover {
+    background: rgba(102, 126, 234, 0.4);
+    color: white;
+}
+
+.ai-examples.hidden {
+    display: none;
+}
+
+
+/* AI Insights Sidebar */
+.insights-toggle {
+    position: fixed;
+    right: 280px;
+    top: 280px;
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    font-size: 1.3rem;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    transition: all 0.3s ease;
+    z-index: 101;
+}
+
+.insights-toggle:hover {
+    transform: scale(1.1);
+}
+
+.insights-toggle.collapsed {
+    right: 20px;
+}
+
+.insights-sidebar {
+    position: fixed;
+    right: 0;
+    top: 100px;
+    width: 300px;
+    background: linear-gradient(180deg, rgba(26, 26, 46, 0.98) 0%, rgba(22, 33, 62, 0.98) 100%);
+    border-left: 1px solid rgba(102, 126, 234, 0.3);
+    border-radius: 15px 0 0 15px;
+    padding: 20px;
+    z-index: 100;
+    transform: translateX(0);
+    transition: transform 0.3s ease;
+    max-height: calc(100vh - 150px);
+    overflow-y: auto;
+    box-shadow: -5px 0 30px rgba(0, 0, 0, 0.3);
+}
+
+.insights-sidebar.collapsed {
+    transform: translateX(100%);
+}
+
+.insights-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.insights-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    background: linear-gradient(135deg, #667eea 0%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.insights-refresh {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: transform 0.3s ease;
+}
+
+.insights-refresh:hover {
+    transform: rotate(180deg);
+}
+
+.insights-refresh.spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.insights-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.insights-loading {
+    text-align: center;
+    padding: 30px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Individual Insight Cards */
+.insight-card {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 15px;
+    animation: insightSlide 0.5s ease forwards;
+    opacity: 0;
+    transform: translateX(20px);
+    border-left: 3px solid #667eea;
+}
+
+.insight-card:nth-child(1) { animation-delay: 0s; }
+.insight-card:nth-child(2) { animation-delay: 0.1s; }
+.insight-card:nth-child(3) { animation-delay: 0.2s; }
+.insight-card:nth-child(4) { animation-delay: 0.3s; }
+
+@keyframes insightSlide {
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.insight-card.win { border-left-color: #48bb78; }
+.insight-card.progress { border-left-color: #667eea; }
+.insight-card.momentum { border-left-color: #f6ad55; }
+.insight-card.spotlight { border-left-color: #ed64a6; }
+
+.insight-card.fade-out {
+    animation: insightFade 0.3s ease forwards;
+}
+
+@keyframes insightFade {
+    to {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+}
+
+.insight-icon {
+    font-size: 1.5rem;
+    margin-bottom: 8px;
+}
+
+.insight-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 5px;
+    color: #a78bfa;
+}
+
+.insight-text {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.8);
+    line-height: 1.4;
+}
+
+/* Stats bar at bottom */
+.insights-stats {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.insight-stat {
+    text-align: center;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+}
+
+.insight-stat-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #667eea;
+}
+
+.insight-stat-label {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+}
+
+/* Pulse animation for new insights */
+.insight-card.new {
+    animation: insightPulse 0.5s ease;
+}
+
+@keyframes insightPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.4); }
+    50% { box-shadow: 0 0 20px 5px rgba(102, 126, 234, 0.2); }
+}
+
+/* Auto-refresh indicator */
+.insights-timer {
+    position: absolute;
+    bottom: 10px;
+    left: 20px;
+    right: 20px;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.insights-timer-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    animation: timerProgress 10s linear infinite;
+}
+
+@keyframes timerProgress {
+    from { width: 0%; }
+    to { width: 100%; }
+}

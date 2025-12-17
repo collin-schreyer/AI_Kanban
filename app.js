@@ -71,6 +71,9 @@ async function showApp() {
     
     await loadProjects();
     await loadActivity();
+    
+    // Start AI insights auto-refresh
+    startInsightsAutoRefresh();
 }
 
 // Data Loading
@@ -836,9 +839,20 @@ function handleAiKeypress(e) {
     }
 }
 
+function askExample(btn) {
+    const question = btn.textContent;
+    document.getElementById('aiInput').value = question;
+    sendAiMessage();
+    // Hide examples after first use
+    document.getElementById('aiExamples').classList.add('hidden');
+}
+
 async function sendAiMessage() {
     const input = document.getElementById('aiInput');
     const message = input.value.trim();
+    
+    // Hide examples once user starts chatting
+    document.getElementById('aiExamples')?.classList.add('hidden');
     
     if (!message) return;
     
@@ -1735,6 +1749,90 @@ function emailExecReport() {
     const body = encodeURIComponent(text);
     window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
     showToast('Opening email client...');
+}
+
+// AI Insights Sidebar
+let insightsInterval = null;
+
+function toggleInsightsSidebar() {
+    const sidebar = document.getElementById('insightsSidebar');
+    const toggle = document.getElementById('insightsToggle');
+    sidebar.classList.toggle('collapsed');
+    toggle.classList.toggle('collapsed');
+}
+
+async function refreshInsights() {
+    const content = document.getElementById('insightsContent');
+    const refreshBtn = document.querySelector('.insights-refresh');
+    
+    // Add spinning animation
+    refreshBtn?.classList.add('spinning');
+    
+    // Fade out existing cards
+    content.querySelectorAll('.insight-card').forEach(card => {
+        card.classList.add('fade-out');
+    });
+    
+    await new Promise(r => setTimeout(r, 300));
+    
+    try {
+        const res = await fetch(`${API_URL}/insights`);
+        const data = await res.json();
+        
+        renderInsights(data.insights, data.stats);
+    } catch (err) {
+        console.error('Failed to load insights:', err);
+        content.innerHTML = '<div class="insights-loading">Unable to load insights</div>';
+    }
+    
+    refreshBtn?.classList.remove('spinning');
+}
+
+function renderInsights(insights, stats) {
+    const content = document.getElementById('insightsContent');
+    
+    content.innerHTML = `
+        ${insights.map(insight => `
+            <div class="insight-card ${insight.type || 'progress'} new">
+                <div class="insight-icon">${insight.icon || '💡'}</div>
+                <div class="insight-title">${insight.title}</div>
+                <div class="insight-text">${insight.text}</div>
+            </div>
+        `).join('')}
+        
+        <div class="insights-stats">
+            <div class="insight-stat">
+                <div class="insight-stat-value">${stats?.projects || 0}</div>
+                <div class="insight-stat-label">Projects</div>
+            </div>
+            <div class="insight-stat">
+                <div class="insight-stat-value">${stats?.progress || 0}%</div>
+                <div class="insight-stat-label">Complete</div>
+            </div>
+            <div class="insight-stat">
+                <div class="insight-stat-value">${stats?.completed || 0}</div>
+                <div class="insight-stat-label">Tasks Done</div>
+            </div>
+            <div class="insight-stat">
+                <div class="insight-stat-value">${(stats?.total || 0) - (stats?.completed || 0)}</div>
+                <div class="insight-stat-label">Remaining</div>
+            </div>
+        </div>
+        
+        
+    `;
+    
+    // Remove 'new' class after animation
+    setTimeout(() => {
+        content.querySelectorAll('.insight-card').forEach(card => {
+            card.classList.remove('new');
+        });
+    }, 500);
+}
+
+function startInsightsAutoRefresh() {
+    // Just load once on startup
+    refreshInsights();
 }
 
 // Initialize

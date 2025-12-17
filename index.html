@@ -51,6 +51,18 @@
             <button class="tab-btn" onclick="switchTab('schedule')">🗓️ Collin's Schedule</button>
         </div>
 
+        <!-- AI Insights Sidebar -->
+        <button class="insights-toggle" id="insightsToggle" onclick="toggleInsightsSidebar()">💡</button>
+        <div class="insights-sidebar" id="insightsSidebar">
+            <div class="insights-header">
+                <h3>✨ AI Insights</h3>
+                <button class="insights-refresh" onclick="refreshInsights()" title="Refresh">🔄</button>
+            </div>
+            <div class="insights-content" id="insightsContent">
+                <div class="insights-loading">Loading insights...</div>
+            </div>
+        </div>
+
         <!-- Board Tab -->
         <div id="boardTab" class="tab-content active">
             <div class="filters">
@@ -274,8 +286,15 @@
         </div>
         <div class="ai-body" id="aiBody">
             <div class="ai-messages" id="aiMessages"></div>
+            <div class="ai-examples" id="aiExamples">
+                <div class="ai-examples-label">Try asking:</div>
+                <button class="ai-example-btn" onclick="askExample(this)">What is Collin working on?</button>
+                <button class="ai-example-btn" onclick="askExample(this)">What are Carl's projects?</button>
+                <button class="ai-example-btn" onclick="askExample(this)">What's the overall progress?</button>
+                <button class="ai-example-btn" onclick="askExample(this)">What was recently completed?</button>
+            </div>
             <div class="ai-input-container">
-                <input type="text" id="aiInput" placeholder="Ask about your projects..." onkeypress="handleAiKeypress(event)">
+                <input type="text" id="aiInput" placeholder="Ask about projects, progress, tasks..." onkeypress="handleAiKeypress(event)">
                 <button class="btn btn-primary" onclick="sendAiMessage()">Send</button>
             </div>
         </div>

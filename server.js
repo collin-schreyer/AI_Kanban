@@ -90,25 +90,61 @@ const seedUsers = [
 const insertUser = db.prepare('INSERT OR IGNORE INTO users (username, password, display_name) VALUES (?, ?, ?)');
 seedUsers.forEach(u => insertUser.run(u.username, u.password, u.display_name));
 
-// Seed initial projects if empty
+// Seed all projects and subtasks if empty
 const projectCount = db.prepare('SELECT COUNT(*) as count FROM projects').get();
 if (projectCount.count === 0) {
-  const initialProjects = [
-    { name: "FPI", description: "FPI AI Project - Federal Process Innovation initiative leveraging AI for government efficiency", owner: "Tom" },
-    { name: "SRT", description: "SRT AI Project - Speech Recognition Technology for automated transcription services", owner: "Ann" },
-    { name: "DOS AI Tools", description: "Department of State AI Tools - Suite of AI-powered tools for diplomatic communications", owner: "Ann" },
-    { name: "AI-Call Center", description: "AI Call Center - Intelligent call routing and automated customer service system", owner: "Carl" },
-    { name: "HR Intelligence", description: "HR Intelligence - AI-driven human resources analytics and talent management", owner: "Carl" },
-    { name: "GSA General AI Work", description: "GSA's general AI work - General Services Administration AI modernization efforts", owner: "Tom" },
-    { name: "NASA AI", description: "NASA AI Project - Space exploration data analysis and mission planning AI", owner: "Carl" },
-    { name: "VA AI", description: "VA AI Project - Veterans Affairs healthcare and benefits processing automation", owner: "Carl" },
-    { name: "DHA Proposal", description: "DHA Proposal - Defense Health Agency AI implementation proposal", owner: "Carl" },
-    { name: "Legal AI", description: "Legal AI Project - AI-assisted legal document review and compliance checking", owner: "Carl" }
-  ];
+  console.log('Seeding database with all projects and subtasks...');
+  const { allProjectsData } = require('./seed-all.js');
   
-  const insertProject = db.prepare('INSERT INTO projects (name, description, owner, tags) VALUES (?, ?, ?, ?)');
-  initialProjects.forEach(p => insertProject.run(p.name, p.description, p.owner, '[]'));
+  const insertProject = db.prepare(`
+    INSERT INTO projects (name, description, owner, status, priority, tags, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  
+  const insertSubtask = db.prepare(`
+    INSERT INTO subtasks (project_id, name, description, status, assignee, created_at, completed_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  
+  const insertHistory = db.prepare(`
+    INSERT INTO history (project_id, user, action, details, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  
+  allProjectsData.forEach(project => {
+    const result = insertProject.run(
+      project.name,
+      project.description,
+      project.owner,
+      project.status || 'inprogress',
+      project.priority || 'medium',
+      JSON.stringify(project.tags || []),
+      new Date().toISOString()
+    );
+    
+    const projectId = result.lastInsertRowid;
+    console.log(`  ✓ ${project.name} (${project.subtasks.length} subtasks)`);
+    
+    project.subtasks.forEach(subtask => {
+      const completedAt = subtask.status === 'done' ? new Date().toISOString() : null;
+      insertSubtask.run(
+        projectId,
+        subtask.name,
+        subtask.description || '',
+        subtask.status,
+        subtask.assignee,
+        new Date().toISOString(),
+        completedAt
+      );
+    });
+    
+    insertHistory.run(projectId, 'Collin', 'created', 'Project initialized', new Date().toISOString());
+  });
+  
+  console.log(`✅ Seeded ${allProjectsData.length} projects with subtasks\n`);
 }
+
+
 
 
 // AUTH ROUTES
@@ -451,6 +487,14 @@ app.post('/api/ai/chat', async (req, res) => {
   // Get ALL kanban data for complete context
   const projects = db.prepare('SELECT * FROM projects').all();
   const allSubtasks = db.prepare('SELECT * FROM subtasks').all();
+  
+  // Debug logging
+  console.log(`\n=== AI CHAT REQUEST ===`);
+  console.log(`User: ${user}`);
+  console.log(`Question: ${message}`);
+  console.log(`Projects in DB: ${projects.length}`);
+  console.log(`Subtasks in DB: ${allSubtasks.length}`);
+  console.log(`Project names: ${projects.map(p => p.name).join(', ')}`);
   const allComments = db.prepare(`
     SELECT c.*, p.name as project_name 
     FROM comments c 
@@ -493,43 +537,36 @@ app.post('/api/ai/chat', async (req, res) => {
   const inProgressSubtasks = allSubtasks.filter(s => s.status === 'inprogress').length;
   const overallProgress = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
 
-  const systemPrompt = `You are a data-focused AI assistant for the AI Projects Kanban board. Your job is to answer questions CONCISELY using ONLY the actual data provided below. Never make up information.
+  const systemPrompt = `You are a helpful AI assistant for the AI Projects Kanban board. Answer questions using the data below.
 
-TEAM CONTEXT:
-- Collin = Builder/Developer (implements everything)
-- Carl, Tom, Ann = Project Owners (request and oversee work)
-- Current user asking: ${user}
+TEAM:
+- Collin = Principal AI Architect (builds ALL projects, does all the actual work)
+- Carl = CTO (Managing Director, oversees AI initiatives)
+- Tom = Managing Director
+- Ann = Managing Director
+- User asking: ${user}
 
-PORTFOLIO SUMMARY:
-- Total Projects: ${totalProjects}
-- Total Tasks: ${totalSubtasks}
-- Completed: ${completedSubtasks} (${overallProgress}%)
-- In Progress: ${inProgressSubtasks}
-- Todo: ${totalSubtasks - completedSubtasks - inProgressSubtasks}
+PORTFOLIO: ${totalProjects} projects, ${totalSubtasks} tasks, ${completedSubtasks} done (${overallProgress}%), ${inProgressSubtasks} in progress
 
-COMPLETE PROJECT DATA:
-${projectData.map(p => `
-[${p.name}]
-Owner: ${p.owner} | Priority: ${p.priority} | Status: ${p.status}
-Progress: ${p.progress}% (${p.completedCount}/${p.totalSubtasks} tasks)
-Description: ${p.description}
-Currently Working On: ${p.currentWork.length > 0 ? p.currentWork.join(', ') : 'Nothing active'}
-Up Next: ${p.upNext.length > 0 ? p.upNext.join(', ') : 'Nothing queued'}
-Recently Completed: ${p.recentlyCompleted.length > 0 ? p.recentlyCompleted.join(', ') : 'None yet'}
-${p.recentComments.length > 0 ? `Recent Comments: ${p.recentComments.map(c => `${c.author}: "${c.text}"`).join(' | ')}` : ''}
-`).join('\n')}
+PROJECTS AND CURRENT WORK:
+${projectData.map(p => `• ${p.name} (${p.owner}, ${p.priority} priority, ${p.progress}% done)
+  - Working on: ${p.currentWork.length > 0 ? p.currentWork.join(', ') : 'None currently'}
+  - Up next: ${p.upNext.length > 0 ? p.upNext.join(', ') : 'None'}
+  - Recently done: ${p.recentlyCompleted.length > 0 ? p.recentlyCompleted.join(', ') : 'None'}`).join('\n')}
 
-RECENT ACTIVITY (last 30 events):
-${recentActivity.map(a => `- ${a.user}: ${a.message}`).join('\n')}
+When asked "What is Collin working on?" - list all items from "Working on" fields above.
+When asked about a specific project - give its details from above.
+When asked about progress - use the percentages and counts above.
 
-RESPONSE RULES:
-1. Be CONCISE - short, direct answers. No fluff.
-2. ONLY use data from above - never invent information
-3. Include specific numbers and percentages when relevant
-4. If asked about something not in the data, say "I don't have that information"
-5. Format with simple HTML: <strong> for emphasis, <br> for breaks
-6. For lists use: <ul><li>item</li></ul>
-7. Keep responses under 150 words unless detailed breakdown requested`;
+FORMAT YOUR RESPONSES WITH CLEAN HTML:
+- Use <strong> for project names and emphasis
+- Use <div class="ai-project-card"> for each project block
+- Use <div class="ai-status working">🔄 Working on:</div> for current work
+- Use <div class="ai-status next">📅 Up next:</div> for upcoming
+- Use <div class="ai-status done">✅ Recently done:</div> for completed
+- Use <ul><li> for lists within sections
+- Keep answers organized and scannable
+- Be concise but thorough`;
 
   try {
     const completion = await openai.chat.completions.create({
@@ -815,6 +852,69 @@ Write in a professional, executive-friendly tone. Emphasize business value and o
   } catch (error) {
     console.error('OpenAI error:', error);
     res.status(500).json({ error: 'AI service unavailable' });
+  }
+});
+
+// AI INSIGHTS - Optimistic facts about projects
+app.get('/api/insights', async (req, res) => {
+  const projects = db.prepare('SELECT * FROM projects').all();
+  const allSubtasks = db.prepare('SELECT * FROM subtasks').all();
+  const recentActivity = db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT 20').all();
+  
+  const completedSubtasks = allSubtasks.filter(s => s.status === 'done').length;
+  const totalSubtasks = allSubtasks.length;
+  const overallProgress = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+  
+  // Get random project for spotlight
+  const randomProject = projects[Math.floor(Math.random() * projects.length)];
+  const projectSubtasks = allSubtasks.filter(s => s.project_id === randomProject?.id);
+  const projectProgress = projectSubtasks.length > 0 
+    ? Math.round((projectSubtasks.filter(s => s.status === 'done').length / projectSubtasks.length) * 100) 
+    : 0;
+
+  const systemPrompt = `Generate 3-4 SHORT, OPTIMISTIC insights about this AI project portfolio. Be enthusiastic and highlight wins.
+
+DATA:
+- ${projects.length} active AI projects
+- ${completedSubtasks}/${totalSubtasks} tasks completed (${overallProgress}%)
+- Spotlight project: ${randomProject?.name} (${projectProgress}% complete) - ${randomProject?.description}
+- Recent activity: ${recentActivity.slice(0, 5).map(a => a.message).join(', ')}
+
+Return JSON array of insight objects:
+[
+  {"icon": "emoji", "title": "Short title", "text": "One sentence insight", "type": "win|progress|momentum|spotlight"}
+]
+
+Be OPTIMISTIC and BRIEF. Celebrate progress. Max 15 words per insight.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: 'Generate insights' }
+      ],
+      max_tokens: 300
+    });
+    
+    let insights;
+    try {
+      insights = JSON.parse(completion.choices[0].message.content.replace(/```json\n?|\n?```/g, '').trim());
+    } catch (e) {
+      insights = [
+        { icon: "🚀", title: "Making Progress", text: `${overallProgress}% of all tasks completed across ${projects.length} projects!`, type: "progress" }
+      ];
+    }
+    
+    res.json({ insights, stats: { projects: projects.length, completed: completedSubtasks, total: totalSubtasks, progress: overallProgress } });
+  } catch (error) {
+    console.error('OpenAI error:', error);
+    res.json({ 
+      insights: [
+        { icon: "📊", title: "Portfolio Active", text: `${projects.length} AI projects in motion`, type: "progress" }
+      ],
+      stats: { projects: projects.length, completed: completedSubtasks, total: totalSubtasks, progress: overallProgress }
+    });
   }
 });
 
