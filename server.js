@@ -444,40 +444,92 @@ Be strategic. Consider:
   }
 });
 
-// AI ASSISTANT ROUTE
+// AI ASSISTANT ROUTE - Full data access, concise answers
 app.post('/api/ai/chat', async (req, res) => {
   const { message, user } = req.body;
   
-  // Get all kanban data for context
+  // Get ALL kanban data for complete context
   const projects = db.prepare('SELECT * FROM projects').all();
-  const recentActivity = db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT 20').all();
+  const allSubtasks = db.prepare('SELECT * FROM subtasks').all();
+  const allComments = db.prepare(`
+    SELECT c.*, p.name as project_name 
+    FROM comments c 
+    JOIN projects p ON c.project_id = p.id 
+    ORDER BY c.created_at DESC LIMIT 50
+  `).all();
+  const recentActivity = db.prepare('SELECT * FROM activity_log ORDER BY created_at DESC LIMIT 30').all();
   
-  const systemPrompt = `You are an AI assistant for the AI Projects Kanban board. You help users understand project status, provide updates, and answer questions about the projects.
+  // Build comprehensive project data
+  const projectData = projects.map(p => {
+    const subtasks = allSubtasks.filter(s => s.project_id === p.id);
+    const comments = allComments.filter(c => c.project_id === p.id);
+    const completed = subtasks.filter(s => s.status === 'done');
+    const inProgress = subtasks.filter(s => s.status === 'inprogress');
+    const todo = subtasks.filter(s => s.status === 'todo');
+    const progress = subtasks.length > 0 ? Math.round((completed.length / subtasks.length) * 100) : 0;
+    
+    return {
+      name: p.name,
+      owner: p.owner,
+      status: p.status,
+      priority: p.priority,
+      description: p.description,
+      progress,
+      totalSubtasks: subtasks.length,
+      completedCount: completed.length,
+      inProgressCount: inProgress.length,
+      todoCount: todo.length,
+      currentWork: inProgress.map(s => s.name),
+      upNext: todo.slice(0, 3).map(s => s.name),
+      recentlyCompleted: completed.slice(-3).map(s => s.name),
+      recentComments: comments.slice(0, 3).map(c => ({ author: c.author, text: c.text.substring(0, 100) }))
+    };
+  });
 
-IMPORTANT CONTEXT:
-- Collin is the BUILDER/DEVELOPER who implements ALL projects
-- Carl, Ann, and Tom are project OWNERS who request and oversee work
-- This board helps everyone track what Collin is working on and what's coming up
+  // Calculate totals
+  const totalProjects = projects.length;
+  const totalSubtasks = allSubtasks.length;
+  const completedSubtasks = allSubtasks.filter(s => s.status === 'done').length;
+  const inProgressSubtasks = allSubtasks.filter(s => s.status === 'inprogress').length;
+  const overallProgress = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
 
-Current Projects:
-${projects.map(p => `- ${p.name} (Owner: ${p.owner}, Status: ${p.status}, Priority: ${p.priority}): ${p.description}`).join('\n')}
+  const systemPrompt = `You are a data-focused AI assistant for the AI Projects Kanban board. Your job is to answer questions CONCISELY using ONLY the actual data provided below. Never make up information.
 
-Recent Activity:
-${recentActivity.map(a => `- ${a.user}: ${a.message} (${a.created_at})`).join('\n')}
+TEAM CONTEXT:
+- Collin = Builder/Developer (implements everything)
+- Carl, Tom, Ann = Project Owners (request and oversee work)
+- Current user asking: ${user}
 
-Current user: ${user}
+PORTFOLIO SUMMARY:
+- Total Projects: ${totalProjects}
+- Total Tasks: ${totalSubtasks}
+- Completed: ${completedSubtasks} (${overallProgress}%)
+- In Progress: ${inProgressSubtasks}
+- Todo: ${totalSubtasks - completedSubtasks - inProgressSubtasks}
 
-FORMATTING RULES:
-- Use clean HTML formatting for responses
-- For lists, use <ul> and <li> tags
-- For project names, wrap in <strong> tags
-- Use <span class="ai-tag owner">Name</span> for owner names
-- Use <span class="ai-tag status">Status</span> for statuses
-- Use <span class="ai-tag priority-high/medium/low">Priority</span> for priorities
-- Keep responses concise but well-organized
-- Use <br> for line breaks, not \\n
+COMPLETE PROJECT DATA:
+${projectData.map(p => `
+[${p.name}]
+Owner: ${p.owner} | Priority: ${p.priority} | Status: ${p.status}
+Progress: ${p.progress}% (${p.completedCount}/${p.totalSubtasks} tasks)
+Description: ${p.description}
+Currently Working On: ${p.currentWork.length > 0 ? p.currentWork.join(', ') : 'Nothing active'}
+Up Next: ${p.upNext.length > 0 ? p.upNext.join(', ') : 'Nothing queued'}
+Recently Completed: ${p.recentlyCompleted.length > 0 ? p.recentlyCompleted.join(', ') : 'None yet'}
+${p.recentComments.length > 0 ? `Recent Comments: ${p.recentComments.map(c => `${c.author}: "${c.text}"`).join(' | ')}` : ''}
+`).join('\n')}
 
-Be helpful, concise, and friendly. Format information in an easy-to-scan way.`;
+RECENT ACTIVITY (last 30 events):
+${recentActivity.map(a => `- ${a.user}: ${a.message}`).join('\n')}
+
+RESPONSE RULES:
+1. Be CONCISE - short, direct answers. No fluff.
+2. ONLY use data from above - never invent information
+3. Include specific numbers and percentages when relevant
+4. If asked about something not in the data, say "I don't have that information"
+5. Format with simple HTML: <strong> for emphasis, <br> for breaks
+6. For lists use: <ul><li>item</li></ul>
+7. Keep responses under 150 words unless detailed breakdown requested`;
 
   try {
     const completion = await openai.chat.completions.create({
@@ -486,7 +538,7 @@ Be helpful, concise, and friendly. Format information in an easy-to-scan way.`;
         { role: 'system', content: systemPrompt },
         { role: 'user', content: message }
       ],
-      max_tokens: 800
+      max_tokens: 600
     });
     
     res.json({ response: completion.choices[0].message.content });
