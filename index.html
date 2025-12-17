@@ -48,6 +48,7 @@
         <div class="tab-nav">
             <button class="tab-btn active" onclick="switchTab('board')">📋 Board</button>
             <button class="tab-btn" onclick="switchTab('analytics')">📈 Analytics</button>
+            <button class="tab-btn" onclick="switchTab('research')">🧪 AI Research</button>
             <button class="tab-btn" onclick="switchTab('dashboard')">🔍 Timelines</button>
             <button class="tab-btn" onclick="switchTab('schedule')">🗓️ Collin's Schedule</button>
         </div>
@@ -225,6 +226,22 @@
             </div>
         </div>
 
+        <!-- AI Research Tab -->
+        <div id="researchTab" class="tab-content">
+            <div class="research-container">
+                <div class="research-header">
+                    <div class="research-title-section">
+                        <h2>🧪 B&A's AI Research</h2>
+                        <p class="research-subtitle">R&D concepts, experiments, and proof-of-concepts by Collin</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="openAddResearchModal()">+ New Concept</button>
+                </div>
+                <div class="research-grid" id="researchGrid">
+                    <!-- Research posts will be rendered here -->
+                </div>
+            </div>
+        </div>
+
         <!-- Timelines Tab (formerly Dashboard) -->
         <div id="dashboardTab" class="tab-content">
             <div class="dashboard-container">
@@ -375,6 +392,77 @@
         <div class="modal-content modal-large">
             <span class="close" onclick="closeModal('timelineModal')">&times;</span>
             <div id="timelineContent"></div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Research Modal -->
+    <div id="researchModal" class="modal">
+        <div class="modal-content modal-large">
+            <span class="close" onclick="closeModal('researchModal')">&times;</span>
+            <h2 id="researchModalTitle">New AI Concept</h2>
+            <form id="researchForm" onsubmit="saveResearch(event)">
+                <input type="hidden" id="researchId">
+                <div class="form-group">
+                    <label>Concept Title</label>
+                    <input type="text" id="researchTitle" required placeholder="e.g., Voice-to-SQL Query Engine">
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="researchCategory">
+                        <option value="nlp">Natural Language Processing</option>
+                        <option value="rag">RAG / Knowledge Systems</option>
+                        <option value="agents">AI Agents</option>
+                        <option value="voice">Voice / Speech</option>
+                        <option value="vision">Computer Vision</option>
+                        <option value="automation">Automation</option>
+                        <option value="infrastructure">Infrastructure / DevOps</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Summary</label>
+                    <textarea id="researchSummary" rows="2" placeholder="Brief one-liner about the concept"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Description / Notes</label>
+                    <textarea id="researchDescription" rows="6" placeholder="Detailed notes, findings, technical approach..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Loom Video URL (optional)</label>
+                    <input type="url" id="researchLoomUrl" placeholder="https://www.loom.com/share/...">
+                </div>
+                <div class="form-group">
+                    <label>Demo URL (optional)</label>
+                    <input type="url" id="researchDemoUrl" placeholder="https://...">
+                </div>
+                <div class="form-group">
+                    <label>GitHub Repo (optional)</label>
+                    <input type="url" id="researchGithubUrl" placeholder="https://github.com/...">
+                </div>
+                <div class="form-group">
+                    <label>Tags (comma separated)</label>
+                    <input type="text" id="researchTags" placeholder="e.g., bedrock, lambda, poc">
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select id="researchStatus">
+                        <option value="idea">💡 Idea</option>
+                        <option value="exploring">🔬 Exploring</option>
+                        <option value="prototype">🛠️ Prototype Built</option>
+                        <option value="demo">🎬 Demo Ready</option>
+                        <option value="promoted">🚀 Promoted to Project</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Save Concept</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Research Detail Modal -->
+    <div id="researchDetailModal" class="modal">
+        <div class="modal-content modal-large">
+            <span class="close" onclick="closeModal('researchDetailModal')">&times;</span>
+            <div id="researchDetailContent"></div>
         </div>
     </div>
 

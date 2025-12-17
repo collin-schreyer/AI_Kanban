@@ -985,6 +985,24 @@ function formatDate(isoString) {
     return date.toLocaleDateString();
 }
 
+function formatMarkdown(text) {
+    if (!text) return '';
+    return text
+        // Headers
+        .replace(/\*\*([^*]+)\*\*/g, '<strong class="md-header">$1</strong>')
+        // Bullet points with •
+        .replace(/^• (.+)$/gm, '<li class="md-bullet">$1</li>')
+        // Bullet points with ✓
+        .replace(/^✓ (.+)$/gm, '<li class="md-check">✓ $1</li>')
+        // Wrap consecutive list items
+        .replace(/(<li class="md-[^"]+">.*<\/li>\n?)+/g, '<ul class="md-list">$&</ul>')
+        // Line breaks
+        .replace(/\n\n/g, '</p><p class="md-para">')
+        .replace(/\n/g, '<br>')
+        // Wrap in paragraph
+        .replace(/^(.+)/, '<p class="md-para">$1</p>');
+}
+
 function showToast(message, type = 'success') {
     const existing = document.querySelector('.toast');
     if (existing) existing.remove();
@@ -1030,6 +1048,8 @@ function switchTab(tabName) {
         loadDashboard();
     } else if (tabName === 'analytics') {
         loadAnalytics();
+    } else if (tabName === 'research') {
+        loadResearch();
     }
 }
 
@@ -2261,3 +2281,231 @@ function startInsightsAutoRefresh() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', init);
+
+
+// ==================== RESEARCH TAB ====================
+let researchPosts = [];
+
+async function loadResearch() {
+    const grid = document.getElementById('researchGrid');
+    grid.innerHTML = '<div class="research-empty"><div class="research-empty-icon">🔬</div><p>Loading research concepts...</p></div>';
+    
+    try {
+        const res = await fetch(`${API_URL}/research`);
+        researchPosts = await res.json();
+        renderResearchGrid();
+    } catch (err) {
+        console.error('Failed to load research:', err);
+        grid.innerHTML = '<div class="research-empty"><div class="research-empty-icon">⚠️</div><h3>Failed to load</h3><p>Please try again</p></div>';
+    }
+}
+
+function renderResearchGrid() {
+    const grid = document.getElementById('researchGrid');
+    
+    if (researchPosts.length === 0) {
+        grid.innerHTML = `
+            <div class="research-empty">
+                <div class="research-empty-icon">🧪</div>
+                <h3>No research concepts yet</h3>
+                <p>Click "+ New Concept" to document your first R&D experiment</p>
+            </div>`;
+        return;
+    }
+    
+    grid.innerHTML = researchPosts.map(post => createResearchCardHTML(post)).join('');
+}
+
+function createResearchCardHTML(post) {
+    const categoryLabels = {
+        nlp: 'NLP', rag: 'RAG / Knowledge', agents: 'AI Agents', voice: 'Voice / Speech',
+        vision: 'Computer Vision', automation: 'Automation', infrastructure: 'Infrastructure', other: 'Other'
+    };
+    const statusLabels = {
+        idea: '💡 Idea', exploring: '🔬 Exploring', prototype: '🛠️ Prototype', demo: '🎬 Demo Ready', promoted: '🚀 Promoted'
+    };
+    const tags = Array.isArray(post.tags) ? post.tags : [];
+    
+    return `
+        <div class="research-card" onclick="openResearchDetail(${post.id})">
+            <div class="research-card-header">
+                <span class="research-card-category ${post.category}">${categoryLabels[post.category] || 'Other'}</span>
+                <h3 class="research-card-title">${post.title}</h3>
+                ${post.summary ? `<p class="research-card-summary">${post.summary}</p>` : ''}
+            </div>
+            <div class="research-card-body">
+                ${post.description ? `<p class="research-card-description">${post.description}</p>` : ''}
+                <div class="research-card-links">
+                    ${post.loom_url ? `<a href="${post.loom_url}" target="_blank" class="research-link loom" onclick="event.stopPropagation()">🎬 Loom</a>` : ''}
+                    ${post.demo_url ? `<a href="${post.demo_url}" target="_blank" class="research-link demo" onclick="event.stopPropagation()">🚀 Demo</a>` : ''}
+                    ${post.github_url ? `<a href="${post.github_url}" target="_blank" class="research-link github" onclick="event.stopPropagation()">📁 GitHub</a>` : ''}
+                </div>
+            </div>
+            <div class="research-card-footer">
+                <div class="research-card-meta">
+                    <span class="research-card-status ${post.status}">${statusLabels[post.status] || post.status}</span>
+                    <span>📅 ${formatDate(post.created_at)}</span>
+                </div>
+                ${tags.length > 0 ? `<div class="research-card-tags">${tags.slice(0, 3).map(t => `<span class="research-tag">${t}</span>`).join('')}</div>` : ''}
+            </div>
+        </div>`;
+}
+
+function openAddResearchModal() {
+    document.getElementById('researchModalTitle').textContent = 'New AI Concept';
+    document.getElementById('researchForm').reset();
+    document.getElementById('researchId').value = '';
+    document.getElementById('researchModal').style.display = 'block';
+}
+
+function editResearch(id) {
+    const post = researchPosts.find(r => r.id === id);
+    if (!post) return;
+    
+    document.getElementById('researchModalTitle').textContent = 'Edit Concept';
+    document.getElementById('researchId').value = post.id;
+    document.getElementById('researchTitle').value = post.title;
+    document.getElementById('researchCategory').value = post.category;
+    document.getElementById('researchSummary').value = post.summary || '';
+    document.getElementById('researchDescription').value = post.description || '';
+    document.getElementById('researchLoomUrl').value = post.loom_url || '';
+    document.getElementById('researchDemoUrl').value = post.demo_url || '';
+    document.getElementById('researchGithubUrl').value = post.github_url || '';
+    document.getElementById('researchTags').value = (post.tags || []).join(', ');
+    document.getElementById('researchStatus').value = post.status;
+    
+    closeModal('researchDetailModal');
+    document.getElementById('researchModal').style.display = 'block';
+}
+
+async function saveResearch(e) {
+    e.preventDefault();
+    
+    const id = document.getElementById('researchId').value;
+    const data = {
+        title: document.getElementById('researchTitle').value,
+        category: document.getElementById('researchCategory').value,
+        summary: document.getElementById('researchSummary').value,
+        description: document.getElementById('researchDescription').value,
+        loomUrl: document.getElementById('researchLoomUrl').value,
+        demoUrl: document.getElementById('researchDemoUrl').value,
+        githubUrl: document.getElementById('researchGithubUrl').value,
+        tags: document.getElementById('researchTags').value.split(',').map(t => t.trim()).filter(t => t),
+        status: document.getElementById('researchStatus').value,
+        user: currentUser
+    };
+    
+    try {
+        if (id) {
+            await fetch(`${API_URL}/research/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            showToast('Concept updated!');
+        } else {
+            await fetch(`${API_URL}/research`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            showToast('Concept created!');
+        }
+        
+        closeModal('researchModal');
+        await loadResearch();
+        await loadActivity();
+    } catch (err) {
+        console.error('Failed to save research:', err);
+        showToast('Failed to save concept', 'error');
+    }
+}
+
+async function deleteResearch(id) {
+    const post = researchPosts.find(r => r.id === id);
+    if (!post || !confirm(`Delete "${post.title}"?`)) return;
+    
+    try {
+        await fetch(`${API_URL}/research/${id}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: currentUser })
+        });
+        
+        closeModal('researchDetailModal');
+        await loadResearch();
+        await loadActivity();
+        showToast('Concept deleted');
+    } catch (err) {
+        console.error('Failed to delete research:', err);
+        showToast('Failed to delete', 'error');
+    }
+}
+
+async function openResearchDetail(id) {
+    const post = researchPosts.find(r => r.id === id);
+    if (!post) return;
+    
+    const categoryLabels = {
+        nlp: 'Natural Language Processing', rag: 'RAG / Knowledge Systems', agents: 'AI Agents',
+        voice: 'Voice / Speech', vision: 'Computer Vision', automation: 'Automation',
+        infrastructure: 'Infrastructure / DevOps', other: 'Other'
+    };
+    const statusLabels = {
+        idea: '💡 Idea', exploring: '🔬 Exploring', prototype: '🛠️ Prototype Built',
+        demo: '🎬 Demo Ready', promoted: '🚀 Promoted to Project'
+    };
+    const tags = Array.isArray(post.tags) ? post.tags : [];
+    
+    // Convert Loom share URL to embed URL
+    let loomEmbed = '';
+    if (post.loom_url) {
+        const loomMatch = post.loom_url.match(/loom\.com\/share\/([a-zA-Z0-9]+)/);
+        if (loomMatch) {
+            loomEmbed = `<div class="research-detail-video"><iframe src="https://www.loom.com/embed/${loomMatch[1]}" allowfullscreen></iframe></div>`;
+        }
+    }
+    
+    const html = `
+        <div class="research-detail-header">
+            <span class="research-card-category ${post.category}">${categoryLabels[post.category] || 'Other'}</span>
+            <h2>${post.title}</h2>
+            <div class="research-detail-meta">
+                <span class="research-card-status ${post.status}">${statusLabels[post.status] || post.status}</span>
+                <span>👤 ${post.author || 'Collin'}</span>
+                <span>📅 ${formatDate(post.created_at)}</span>
+            </div>
+        </div>
+        
+        ${post.summary ? `<div class="research-detail-section"><p style="font-size: 1.1rem; color: rgba(255,255,255,0.8);">${post.summary}</p></div>` : ''}
+        
+        ${loomEmbed ? `<div class="research-detail-section"><h3>🎬 Video Walkthrough</h3>${loomEmbed}</div>` : ''}
+        
+        ${post.description ? `<div class="research-detail-section"><h3>📝 Notes & Details</h3><div class="research-detail-description">${formatMarkdown(post.description)}</div></div>` : ''}
+        
+        <div class="research-detail-section">
+            <h3>🔗 Links</h3>
+            <div class="research-detail-links">
+                ${post.loom_url ? `<a href="${post.loom_url}" target="_blank" class="research-detail-link">🎬 Watch on Loom</a>` : ''}
+                ${post.demo_url ? `<a href="${post.demo_url}" target="_blank" class="research-detail-link">🚀 Live Demo</a>` : ''}
+                ${post.github_url ? `<a href="${post.github_url}" target="_blank" class="research-detail-link">📁 GitHub Repo</a>` : ''}
+                ${!post.loom_url && !post.demo_url && !post.github_url ? '<p style="color: rgba(255,255,255,0.5);">No links added yet</p>' : ''}
+            </div>
+        </div>
+        
+        ${tags.length > 0 ? `
+            <div class="research-detail-section">
+                <h3>🏷️ Tags</h3>
+                <div class="card-tags">${tags.map(t => `<span class="tag">${t}</span>`).join('')}</div>
+            </div>
+        ` : ''}
+        
+        <div class="research-detail-actions">
+            <button class="btn btn-secondary" onclick="editResearch(${post.id})">✏️ Edit</button>
+            <button class="btn btn-danger" onclick="deleteResearch(${post.id})">🗑️ Delete</button>
+        </div>
+    `;
+    
+    document.getElementById('researchDetailContent').innerHTML = html;
+    document.getElementById('researchDetailModal').style.display = 'block';
+}

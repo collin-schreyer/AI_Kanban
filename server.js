@@ -79,6 +79,22 @@ db.exec(`
     completed_at TEXT,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS research (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    summary TEXT,
+    description TEXT,
+    category TEXT DEFAULT 'other',
+    status TEXT DEFAULT 'idea',
+    loom_url TEXT,
+    demo_url TEXT,
+    github_url TEXT,
+    tags TEXT,
+    author TEXT DEFAULT 'Collin',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 
 // Seed initial users if not exist
@@ -154,6 +170,99 @@ if (projectCount.count === 0) {
     insertComment.run(uscisProject.id, 'Carl', 'Ready to present to the next level at USCIS - Round #2 🎯', new Date().toISOString());
     console.log('  ✓ Added USCIS comment');
   }
+}
+
+// Seed research concepts if empty
+const researchCount = db.prepare('SELECT COUNT(*) as count FROM research').get();
+if (researchCount.count === 0) {
+  console.log('Seeding research concepts...');
+  const insertResearch = db.prepare(`
+    INSERT INTO research (title, summary, description, category, status, loom_url, demo_url, github_url, tags, author)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  
+  const researchData = [
+    {
+      title: 'EEOC Intelligent Intake: Explainable RAG for Legal Compliance',
+      summary: 'An AI-powered intake assistant that analyzes workplace discrimination complaints in real-time, retrieving official EEOC enforcement guidance and providing explainable, legally grounded recommendations for counselors.',
+      description: `**The Problem**
+EEOC intake counselors must rapidly evaluate complex narratives against thousands of pages of evolving legal guidance (ADA, Title VII) to determine jurisdiction and next steps, often leading to bottlenecks or inconsistent application of policy.
+
+**Tech Stack**
+• Frontend: Next.js 15 (React), TailwindCSS, Lucide Icons
+• Backend: Node.js and Python Hybrid Microservices
+• Vector Database: ChromaDB (running locally/persistently)
+• ML/AI: sentence-transformers (all-MiniLM-L6-v2) for local embedding; OpenAI GPT-4o for reasoning
+
+**Architecture**
+Hybrid architecture where Next.js handles user interaction and API orchestration, while a dedicated Python microservice manages the vector lifecycle (ingestion and semantic retrieval).
+
+**Technical Challenges Solved**
+• Explainability: Architected an AI Reasoning layer that forces the LLM to generate specific 1-sentence explanations connecting complaint details to retrieved statutes
+• Hybrid Interop: Seamlessly integrating Python vector service with Node.js frontend
+
+**Key Features**
+• Sub-3-Second Analysis: Instant sentiment scoring and policy retrieval
+• Grounded RAG Pipeline: Ingests and cites real April 2024 EEOC Enforcement Guidance
+• Interactive Explainable Cards: Policy cards expand to reveal AI logic for matches
+• Scenario Simulation: One-click demo functionality for complex legal scenarios
+
+**Business Value**
+• Efficiency: Drastically reduces counselor time searching for policy nuances
+• Consistency: Ensures every assessment uses current official guidance
+• Training: Acts as co-pilot for new counselors learning why laws apply`,
+      category: 'rag',
+      status: 'demo',
+      loomUrl: null,
+      demoUrl: null,
+      githubUrl: null,
+      tags: ['rag', 'legal-tech', 'chromadb', 'nextjs', 'hybrid-ai', 'va', 'eeoc']
+    },
+    {
+      title: '4D UAS Defense Simulator',
+      summary: 'A browser-based, high-fidelity 3D simulation engine that trains air defense commanders by visualizing specific decision windows in a drone swarm attack, featuring AI-assisted Command and Control (C2) and timeline manipulation.',
+      description: `**The Problem**
+Addresses the gap in current training systems which are either too abstract (2D maps) or too complex/heavy (full flight sims). Focuses specifically on The Commanders Loop - training operators to make high-speed decisions under pressure using AI recommendations.
+
+**Tech Stack**
+• Frontend: React + Vite (speed and component architecture)
+• 3D Engine: Three.js / React-Three-Fiber (R3F) for lightweight, browser-based rendering
+• State/Logic: Zustand (simulation loop and timeline state management)
+• Aesthetics: TailwindCSS + Framer Motion (premium Glassmorphism UI)
+• Audio: Web Audio API (procedural sound generation for alerts/explosions)
+
+**Architecture**
+A client-side Digital Twin engine that procedurally generates scenario data. Uses a custom game loop decoupled from the React render cycle for performance, with a 4D store allowing the user to scrub backward and forward through simulation time.
+
+**Technical Challenges Solved**
+• 4D Time Control: Implementing robust Rewind/Replay system for After-Action Reviews (AAR)
+• Procedural Swarms: Generating unique, non-deterministic drone attack patterns on the fly
+• Kinetic Visualization: Simulating interceptor ballistics and shockwave cleanup logic in web context
+
+**Key Features**
+• True 4D Battlespace: Full 3D terrain visualization with time-scrubbing (Pause, Rewind, Replay)
+• AI-Assisted C2: Decision Support System overlay classifying threats and proposing ROE-compliant solutions
+• Procedural Threat Generation: Infinite variations of drone swarms; no two scenarios identical
+• Kinetic Engagement: Visual interceptor launches, missile trails, physics-based destruction
+• Immersive Audio: Procedurally generated alerts, launch whooshes, and explosion effects
+
+**Business Value**
+Target Audience: Senior Defense Executives and Procurement Officers
+Impact: Serves as a Digital Twin for Doctrine, allowing rapid iteration on Rules of Engagement (ROE) and defense tactics without expensive field exercises. Shifts training focus from button pushing to decision speed.`,
+      category: 'agents',
+      status: 'prototype',
+      loomUrl: 'https://www.loom.com/share/1e83596b194f474eb987c981f790d009',
+      demoUrl: null,
+      githubUrl: null,
+      tags: ['sim-tech', 'react-three-fiber', 'ai-c2', 'defense', 'digital-twin', 'uas', '3d']
+    }
+  ];
+  
+  researchData.forEach(r => {
+    insertResearch.run(r.title, r.summary, r.description, r.category, r.status, r.loomUrl, r.demoUrl, r.githubUrl, JSON.stringify(r.tags), 'Collin');
+    console.log(`  ✓ ${r.title}`);
+  });
+  console.log(`✅ Seeded ${researchData.length} research concepts\n`);
 }
 
 
@@ -346,6 +455,50 @@ app.get('/api/subtasks', (req, res) => {
     ORDER BY s.created_at DESC
   `).all();
   res.json(subtasks);
+});
+
+// RESEARCH ROUTES
+app.get('/api/research', (req, res) => {
+  const research = db.prepare('SELECT * FROM research ORDER BY created_at DESC').all();
+  research.forEach(r => r.tags = JSON.parse(r.tags || '[]'));
+  res.json(research);
+});
+
+app.get('/api/research/:id', (req, res) => {
+  const research = db.prepare('SELECT * FROM research WHERE id = ?').get(req.params.id);
+  if (research) research.tags = JSON.parse(research.tags || '[]');
+  res.json(research);
+});
+
+app.post('/api/research', (req, res) => {
+  const { title, summary, description, category, status, loomUrl, demoUrl, githubUrl, tags, user } = req.body;
+  const result = db.prepare(`
+    INSERT INTO research (title, summary, description, category, status, loom_url, demo_url, github_url, tags, author)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(title, summary, description, category, status, loomUrl, demoUrl, githubUrl, JSON.stringify(tags || []), user || 'Collin');
+  
+  db.prepare('INSERT INTO activity_log (user, message) VALUES (?, ?)').run(user || 'Collin', `Created research concept: ${title}`);
+  res.json({ id: result.lastInsertRowid, success: true });
+});
+
+app.put('/api/research/:id', (req, res) => {
+  const { title, summary, description, category, status, loomUrl, demoUrl, githubUrl, tags, user } = req.body;
+  db.prepare(`
+    UPDATE research SET title = ?, summary = ?, description = ?, category = ?, status = ?, 
+    loom_url = ?, demo_url = ?, github_url = ?, tags = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+  `).run(title, summary, description, category, status, loomUrl, demoUrl, githubUrl, JSON.stringify(tags || []), req.params.id);
+  
+  db.prepare('INSERT INTO activity_log (user, message) VALUES (?, ?)').run(user || 'Collin', `Updated research concept: ${title}`);
+  res.json({ success: true });
+});
+
+app.delete('/api/research/:id', (req, res) => {
+  const research = db.prepare('SELECT title FROM research WHERE id = ?').get(req.params.id);
+  db.prepare('DELETE FROM research WHERE id = ?').run(req.params.id);
+  
+  const { user } = req.body;
+  db.prepare('INSERT INTO activity_log (user, message) VALUES (?, ?)').run(user || 'Collin', `Deleted research concept: ${research?.title}`);
+  res.json({ success: true });
 });
 
 // DASHBOARD - AI Timeline Generation
