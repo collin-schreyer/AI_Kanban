@@ -1050,6 +1050,8 @@ function switchTab(tabName) {
         loadAnalytics();
     } else if (tabName === 'research') {
         loadResearch();
+    } else if (tabName === 'builder') {
+        loadBuilderMode();
     }
 }
 
@@ -2508,4 +2510,276 @@ async function openResearchDetail(id) {
     
     document.getElementById('researchDetailContent').innerHTML = html;
     document.getElementById('researchDetailModal').style.display = 'block';
+}
+
+
+// ==================== BUILDER MODE ====================
+let pendingSuggestions = [];
+let builderHistory = [];
+
+function loadBuilderMode() {
+    populateBuilderProjects();
+    loadBuilderHistory();
+}
+
+function populateBuilderProjects() {
+    const select = document.getElementById('builderProject');
+    select.innerHTML = '<option value="">Select a project...</option>';
+    projects.forEach(p => {
+        const option = document.createElement('option');
+        option.value = p.id;
+        option.textContent = `${p.name} [${p.status}]`;
+        select.appendChild(option);
+    });
+    
+    select.onchange = () => populateBuilderTasks(select.value);
+}
+
+function populateBuilderTasks(projectId) {
+    const select = document.getElementById('builderTask');
+    select.innerHTML = '<option value="">Select a task...</option>';
+    
+    if (!projectId) return;
+    
+    const projectSubtasks = allSubtasks.filter(s => s.project_id === parseInt(projectId));
+    projectSubtasks.forEach(s => {
+        const option = document.createElement('option');
+        option.value = s.id;
+        option.textContent = `${s.name} [${s.status}]`;
+        select.appendChild(option);
+    });
+}
+
+async function analyzeBuilderUpdate() {
+    const projectId = document.getElementById('builderProject').value;
+    const taskId = document.getElementById('builderTask').value;
+    const update = document.getElementById('builderInput').value.trim();
+    
+    if (!update) {
+        showToast('Please describe what you are working on', 'error');
+        return;
+    }
+    
+    const suggestionsDiv = document.getElementById('builderSuggestions');
+    suggestionsDiv.innerHTML = `
+        <div class="builder-loading">
+            <div class="spinner"></div>
+            <p>🤖 Analyzing your update...</p>
+        </div>`;
+    
+    try {
+        const res = await fetch(`${API_URL}/builder/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId, taskId, update })
+        });
+        
+        const data = await res.json();
+        pendingSuggestions = data.suggestions || [];
+        renderSuggestions();
+    } catch (err) {
+        console.error('Builder analysis failed:', err);
+        suggestionsDiv.innerHTML = `
+            <div class="builder-empty">
+                <div class="builder-empty-icon">⚠️</div>
+                <p>Failed to analyze. Please try again.</p>
+            </div>`;
+    }
+}
+
+async function quickBuilderAction(action) {
+    const projectId = document.getElementById('builderProject').value;
+    const taskId = document.getElementById('builderTask').value;
+    
+    if (!projectId && !taskId) {
+        showToast('Please select a project or task first', 'error');
+        return;
+    }
+    
+    const actionMessages = {
+        started: 'I just started working on this',
+        completed: 'I just completed this task',
+        blocked: 'I am blocked on this and need help',
+        review: 'This is ready for review'
+    };
+    
+    const suggestionsDiv = document.getElementById('builderSuggestions');
+    suggestionsDiv.innerHTML = `
+        <div class="builder-loading">
+            <div class="spinner"></div>
+            <p>🤖 Processing quick action...</p>
+        </div>`;
+    
+    try {
+        const res = await fetch(`${API_URL}/builder/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId, taskId, quickAction: actionMessages[action] })
+        });
+        
+        const data = await res.json();
+        pendingSuggestions = data.suggestions || [];
+        
+        // If no AI suggestions, create a default one based on quick action
+        if (pendingSuggestions.length === 0 && taskId) {
+            const task = allSubtasks.find(s => s.id === parseInt(taskId));
+            if (task) {
+                const statusMap = { started: 'inprogress', completed: 'done', blocked: 'todo', review: 'review' };
+                pendingSuggestions = [{
+                    type: action === 'completed' ? 'complete' : 'move',
+                    itemType: 'subtask',
+                    itemId: task.id,
+                    itemName: task.name,
+                    fromStatus: task.status,
+                    toStatus: statusMap[action],
+                    reason: `Quick action: ${action}`
+                }];
+            }
+        }
+        
+        renderSuggestions();
+    } catch (err) {
+        console.error('Quick action failed:', err);
+        showToast('Failed to process action', 'error');
+    }
+}
+
+function renderSuggestions() {
+    const suggestionsDiv = document.getElementById('builderSuggestions');
+    const actionsDiv = document.getElementById('builderActions');
+    
+    if (pendingSuggestions.length === 0) {
+        suggestionsDiv.innerHTML = `
+            <div class="builder-empty">
+                <div class="builder-empty-icon">🤔</div>
+                <p>No changes suggested. Try being more specific about what you completed or started.</p>
+            </div>`;
+        actionsDiv.style.display = 'none';
+        return;
+    }
+    
+    suggestionsDiv.innerHTML = pendingSuggestions.map((s, i) => `
+        <div class="suggestion-card" id="suggestion-${i}" data-index="${i}">
+            <div class="suggestion-header">
+                <span class="suggestion-type ${s.type}">${s.type === 'create' ? '+ new' : s.type}</span>
+                <div class="suggestion-actions">
+                    <button onclick="approveSuggestion(${i})" title="Approve">✅</button>
+                    <button onclick="rejectSuggestion(${i})" title="Reject">❌</button>
+                </div>
+            </div>
+            <div class="suggestion-content">
+                <div class="suggestion-title">${s.itemName}</div>
+                <div class="suggestion-detail">${s.reason}</div>
+                ${s.description ? `<div class="suggestion-description">${s.description}</div>` : ''}
+            </div>
+            ${s.type === 'create' ? `
+                <div class="suggestion-change">
+                    <span class="suggestion-to" style="color: #9f7aea;">📝 New task → ${formatStatus(s.toStatus)}</span>
+                </div>
+            ` : `
+                <div class="suggestion-change">
+                    <span class="suggestion-from">${formatStatus(s.fromStatus)}</span>
+                    <span class="suggestion-arrow">→</span>
+                    <span class="suggestion-to">${formatStatus(s.toStatus)}</span>
+                </div>
+            `}
+        </div>
+    `).join('');
+    
+    actionsDiv.style.display = 'flex';
+}
+
+function approveSuggestion(index) {
+    const card = document.getElementById(`suggestion-${index}`);
+    card.classList.add('approved');
+    pendingSuggestions[index].approved = true;
+    showToast('Change approved - click "Approve All" to apply');
+}
+
+function rejectSuggestion(index) {
+    const card = document.getElementById(`suggestion-${index}`);
+    card.classList.add('rejected');
+    pendingSuggestions[index].rejected = true;
+}
+
+async function approveAllChanges() {
+    // Get all non-rejected suggestions (approved ones or ones not yet acted on)
+    const approvedChanges = pendingSuggestions.filter(s => !s.rejected);
+    
+    if (approvedChanges.length === 0) {
+        showToast('No changes to apply', 'error');
+        return;
+    }
+    
+    try {
+        const res = await fetch(`${API_URL}/builder/apply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ changes: approvedChanges, user: currentUser })
+        });
+        
+        const data = await res.json();
+        console.log('Apply results:', data);
+        const successCount = data.results.filter(r => r.success).length;
+        
+        if (successCount > 0) {
+            showToast(`Applied ${successCount} change${successCount > 1 ? 's' : ''} successfully!`);
+        } else {
+            showToast('No changes were applied', 'error');
+            return;
+        }
+        
+        // Add to history
+        const update = document.getElementById('builderInput').value.trim();
+        builderHistory.unshift({
+            update: update || 'Quick action',
+            changes: approvedChanges,
+            timestamp: new Date().toISOString()
+        });
+        renderBuilderHistory();
+        
+        // Clear and reload
+        clearSuggestions();
+        document.getElementById('builderInput').value = '';
+        await loadProjects();
+        await renderAllCards();
+        await loadActivity();
+        populateBuilderProjects();
+        
+    } catch (err) {
+        console.error('Failed to apply changes:', err);
+        showToast('Failed to apply changes', 'error');
+    }
+}
+
+function clearSuggestions() {
+    pendingSuggestions = [];
+    document.getElementById('builderSuggestions').innerHTML = `
+        <div class="builder-empty">
+            <div class="builder-empty-icon">🤖</div>
+            <p>Describe what you're working on and the AI will suggest board updates</p>
+        </div>`;
+    document.getElementById('builderActions').style.display = 'none';
+}
+
+function loadBuilderHistory() {
+    renderBuilderHistory();
+}
+
+function renderBuilderHistory() {
+    const historyDiv = document.getElementById('builderHistory');
+    
+    if (builderHistory.length === 0) {
+        historyDiv.innerHTML = '<p style="color: rgba(255,255,255,0.4); text-align: center; padding: 20px;">No recent updates</p>';
+        return;
+    }
+    
+    historyDiv.innerHTML = builderHistory.slice(0, 10).map(h => `
+        <div class="history-item">
+            <div class="history-item-content">
+                <strong>${h.changes.length} change${h.changes.length > 1 ? 's' : ''}</strong>: ${h.update.substring(0, 60)}${h.update.length > 60 ? '...' : ''}
+            </div>
+            <span class="history-item-time">${formatDate(h.timestamp)}</span>
+        </div>
+    `).join('');
 }

@@ -49,6 +49,7 @@
             <button class="tab-btn active" onclick="switchTab('board')">📋 Board</button>
             <button class="tab-btn" onclick="switchTab('analytics')">📈 Analytics</button>
             <button class="tab-btn" onclick="switchTab('research')">🧪 AI Research</button>
+            <button class="tab-btn" onclick="switchTab('builder')">🔧 Builder Mode</button>
             <button class="tab-btn" onclick="switchTab('dashboard')">🔍 Timelines</button>
             <button class="tab-btn" onclick="switchTab('schedule')">🗓️ Collin's Schedule</button>
         </div>
@@ -238,6 +239,79 @@
                 </div>
                 <div class="research-grid" id="researchGrid">
                     <!-- Research posts will be rendered here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Builder Mode Tab -->
+        <div id="builderTab" class="tab-content">
+            <div class="builder-container">
+                <div class="builder-header">
+                    <div class="builder-title-section">
+                        <h2>🔧 Builder Mode</h2>
+                        <p class="builder-subtitle">Tell the AI what you're working on and it will suggest board updates for your approval</p>
+                    </div>
+                </div>
+                
+                <div class="builder-main">
+                    <div class="builder-input-section">
+                        <div class="builder-context">
+                            <h3>📍 Current Context</h3>
+                            <div class="builder-selects">
+                                <div class="form-group">
+                                    <label>Working on Project</label>
+                                    <select id="builderProject">
+                                        <option value="">Select a project...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Specific Task (optional)</label>
+                                    <select id="builderTask">
+                                        <option value="">Select a task...</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="builder-update">
+                            <h3>💬 What are you doing?</h3>
+                            <textarea id="builderInput" rows="4" placeholder="Example: Just finished the API integration for the USCIS project. Moving on to testing now. Also completed the documentation for State Dept."></textarea>
+                            <button class="btn btn-primary btn-full" onclick="analyzeBuilderUpdate()">🤖 Analyze & Suggest Changes</button>
+                        </div>
+                        
+                        <div class="builder-quick-actions">
+                            <h3>⚡ Quick Updates</h3>
+                            <div class="quick-action-buttons">
+                                <button class="btn btn-secondary" onclick="quickBuilderAction('started')">Started working on this</button>
+                                <button class="btn btn-secondary" onclick="quickBuilderAction('completed')">Just completed this task</button>
+                                <button class="btn btn-secondary" onclick="quickBuilderAction('blocked')">I'm blocked on this</button>
+                                <button class="btn btn-secondary" onclick="quickBuilderAction('review')">Ready for review</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="builder-suggestions-section">
+                        <h3>📋 Suggested Changes</h3>
+                        <p class="builder-suggestions-hint">AI will suggest card movements based on your update. Review and approve each change.</p>
+                        <div id="builderSuggestions" class="builder-suggestions">
+                            <div class="builder-empty">
+                                <div class="builder-empty-icon">🤖</div>
+                                <p>Describe what you're working on and the AI will suggest board updates</p>
+                            </div>
+                        </div>
+                        
+                        <div id="builderActions" class="builder-action-buttons" style="display: none;">
+                            <button class="btn btn-primary" onclick="approveAllChanges()">✅ Approve All Changes</button>
+                            <button class="btn btn-secondary" onclick="clearSuggestions()">❌ Clear All</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="builder-history">
+                    <h3>📜 Recent Updates</h3>
+                    <div id="builderHistory" class="builder-history-list">
+                        <!-- History will be rendered here -->
+                    </div>
                 </div>
             </div>
         </div>

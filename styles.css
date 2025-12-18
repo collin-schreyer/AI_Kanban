@@ -3314,3 +3314,311 @@ body {
 .research-detail-description .md-para:last-child {
     margin-bottom: 0;
 }
+
+/* Builder Mode Tab */
+.builder-container {
+    padding: 20px 0;
+}
+
+.builder-header {
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.builder-title-section h2 {
+    font-size: 1.8rem;
+    margin-bottom: 8px;
+}
+
+.builder-subtitle {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 1rem;
+}
+
+.builder-main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    margin-bottom: 30px;
+}
+
+.builder-input-section {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+.builder-context,
+.builder-update,
+.builder-quick-actions {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 20px;
+}
+
+.builder-context h3,
+.builder-update h3,
+.builder-quick-actions h3,
+.builder-suggestions-section h3,
+.builder-history h3 {
+    font-size: 1rem;
+    margin-bottom: 15px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.builder-selects {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.builder-selects select {
+    width: 100%;
+    padding: 12px 15px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-size: 0.95rem;
+}
+
+.builder-update textarea {
+    width: 100%;
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-size: 0.95rem;
+    resize: vertical;
+    min-height: 100px;
+    margin-bottom: 15px;
+}
+
+.builder-update textarea::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.quick-action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.quick-action-buttons .btn {
+    flex: 1;
+    min-width: 140px;
+    font-size: 0.85rem;
+    padding: 10px 15px;
+}
+
+/* Suggestions Section */
+.builder-suggestions-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 20px;
+}
+
+.builder-suggestions-hint {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85rem;
+    margin-bottom: 15px;
+}
+
+.builder-suggestions {
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.builder-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 250px;
+    color: rgba(255, 255, 255, 0.4);
+    text-align: center;
+}
+
+.builder-empty-icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+}
+
+/* Suggestion Card */
+.suggestion-card {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 15px;
+    border-left: 4px solid #667eea;
+    transition: all 0.3s ease;
+}
+
+.suggestion-card:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.suggestion-card.approved {
+    border-left-color: #48bb78;
+    opacity: 0.7;
+}
+
+.suggestion-card.rejected {
+    border-left-color: #fc8181;
+    opacity: 0.5;
+    text-decoration: line-through;
+}
+
+.suggestion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+
+.suggestion-type {
+    font-size: 0.75rem;
+    padding: 3px 10px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+.suggestion-type.move { background: rgba(66, 153, 225, 0.3); color: #4299e1; }
+.suggestion-type.complete { background: rgba(72, 187, 120, 0.3); color: #48bb78; }
+.suggestion-type.create { background: rgba(159, 122, 234, 0.3); color: #9f7aea; }
+.suggestion-type.update { background: rgba(246, 173, 85, 0.3); color: #f6ad55; }
+
+.suggestion-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.suggestion-actions button {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.suggestion-actions button:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.suggestion-content {
+    margin-bottom: 10px;
+}
+
+.suggestion-title {
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+.suggestion-detail {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.suggestion-change {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+.suggestion-from {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.suggestion-arrow {
+    color: #667eea;
+}
+
+.suggestion-to {
+    color: #48bb78;
+    font-weight: 500;
+}
+
+.builder-action-buttons {
+    display: flex;
+    gap: 15px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Builder History */
+.builder-history {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 20px;
+}
+
+.builder-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    font-size: 0.9rem;
+}
+
+.history-item-content {
+    flex: 1;
+}
+
+.history-item-time {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 0.8rem;
+}
+
+.builder-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.builder-loading .spinner {
+    margin-bottom: 15px;
+}
+
+@media (max-width: 1024px) {
+    .builder-main {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Create suggestion styling */
+.suggestion-type.create,
+.suggestion-type.\+\ new {
+    background: rgba(159, 122, 234, 0.3);
+    color: #9f7aea;
+}
+
+.suggestion-description {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-top: 5px;
+    font-style: italic;
+}

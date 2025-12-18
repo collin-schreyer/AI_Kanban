@@ -1,0 +1,56 @@
+I'm building an AI Kanban board to track AI projects. I need you to generate realistic sub-tasks for the following project based on what has likely been completed and what remains.
+
+do this for each of the projects you listed
+
+Based on typical AI project development phases, generate 5-10 sub-tasks in this JSON format:
+
+{
+
+  "projectName": "[PROJECT NAME]",
+
+  "subtasks": [
+
+    {
+
+      "name": "Short task name",
+
+      "description": "Brief description of what this task involves",
+
+      "status": "done|inprogress|todo",
+
+      "assignee": "Collin",
+
+      "dueDate": "YYYY-MM-DD or null"
+
+    }
+
+  ]
+
+}
+
+Consider these typical AI project phases:
+
+- Requirements gathering & stakeholder interviews
+
+- Data assessment & collection
+
+- Architecture design
+
+- Proof of concept / prototype
+
+- Model development & training
+
+- Integration development
+
+- Testing & validation
+
+- Documentation
+
+- Security review
+
+- Deployment preparation
+
+- User training / handoff
+
+Make the subtasks specific to this project's domain. Mark early-phase tasks as "done", current work as "inprogress", and future work as "todo". Collin is the builder who does all implementation work.
+

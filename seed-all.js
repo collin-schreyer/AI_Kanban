@@ -213,7 +213,9 @@ const allProjectsData = [
     dueDate: "2025-12-25",
     tags: ["urgent", "VA", "demo"],
     subtasks: [
-      {name: "Demo preparation", status: "inprogress", assignee: "Collin", dueDate: "2025-12-20"}
+      {name: "Determine Demo Scenario w/ Buhari Mustafa", status: "done", assignee: "Collin", dueDate: "2025-12-18"},
+      {name: "Create AI Demonstration 1 for VA", status: "todo", assignee: "Collin"},
+      {name: "Create AI Demonstration 2 for VA", status: "todo", assignee: "Collin"}
     ]
   },
   {

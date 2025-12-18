@@ -1020,6 +1020,130 @@ Write in a professional, executive-friendly tone. Emphasize business value and o
   }
 });
 
+// BUILDER MODE - AI Analysis
+app.post('/api/builder/analyze', async (req, res) => {
+  const { projectId, taskId, update, quickAction } = req.body;
+  
+  const projects = db.prepare('SELECT * FROM projects').all();
+  const allSubtasks = db.prepare('SELECT * FROM subtasks').all();
+  
+  let context = '';
+  if (projectId) {
+    const project = projects.find(p => p.id === parseInt(projectId));
+    const projectSubtasks = allSubtasks.filter(s => s.project_id === parseInt(projectId));
+    context = `Selected Project: ${project?.name} (Status: ${project?.status})\nSubtasks: ${projectSubtasks.map(s => `${s.name} [${s.status}]`).join(', ')}`;
+  }
+  if (taskId) {
+    const task = allSubtasks.find(s => s.id === parseInt(taskId));
+    context += `\nSelected Task: ${task?.name} (Status: ${task?.status})`;
+  }
+
+  const systemPrompt = `You are an AI assistant helping manage a Kanban board. Based on the user's update, suggest card movements AND new tasks to create.
+
+CURRENT BOARD STATE:
+Projects: ${projects.map(p => `${p.id}:${p.name}[${p.status}]`).join(', ')}
+Subtasks: ${allSubtasks.slice(0, 50).map(s => `${s.id}:${s.name}[${s.status}](project:${s.project_id})`).join(', ')}
+
+${context ? `CONTEXT:\n${context}` : ''}
+
+USER UPDATE: "${update || quickAction}"
+${quickAction ? `QUICK ACTION TYPE: ${quickAction}` : ''}
+
+Analyze this update and return a JSON array of suggested changes:
+
+FOR MOVING/COMPLETING EXISTING ITEMS:
+- type: "move" or "complete"
+- itemType: "project" or "subtask"
+- itemId: number (the existing item's ID)
+- itemName: string
+- fromStatus: current status
+- toStatus: new status
+- reason: brief explanation
+
+FOR CREATING NEW SUBTASKS (when user mentions new work or next steps):
+- type: "create"
+- itemType: "subtask"
+- itemId: null
+- itemName: descriptive name for the new task
+- projectId: number (which project to add it to)
+- toStatus: "todo" or "inprogress"
+- description: brief description of the task
+- reason: why this task should be created
+
+Status options: todo, inprogress, review, done
+
+IMPORTANT: 
+- If user mentions completing something, suggest moving it to "done"
+- If user mentions starting something new or next steps, suggest CREATING new subtasks
+- If user mentions what they'll work on next, create those as new tasks
+- Be proactive about suggesting new tasks based on implied next steps
+
+Return ONLY valid JSON array.
+Example: [
+  {"type":"complete","itemType":"subtask","itemId":5,"itemName":"API Integration","fromStatus":"inprogress","toStatus":"done","reason":"User completed this"},
+  {"type":"create","itemType":"subtask","itemId":null,"itemName":"Write API Documentation","projectId":3,"toStatus":"todo","description":"Document the new API endpoints","reason":"Natural next step after API completion"}
+]`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: 'Analyze and suggest changes' }
+      ],
+      max_tokens: 800
+    });
+    
+    let suggestions;
+    try {
+      const content = completion.choices[0].message.content.replace(/```json\n?|\n?```/g, '').trim();
+      suggestions = JSON.parse(content);
+    } catch (e) {
+      suggestions = [];
+    }
+    
+    res.json({ suggestions });
+  } catch (error) {
+    console.error('OpenAI error:', error);
+    res.json({ suggestions: [], error: 'AI analysis failed' });
+  }
+});
+
+// BUILDER MODE - Apply Changes
+app.post('/api/builder/apply', async (req, res) => {
+  const { changes, user } = req.body;
+  const results = [];
+  
+  for (const change of changes) {
+    try {
+      if (change.type === 'move' || change.type === 'complete') {
+        if (change.itemType === 'project') {
+          db.prepare('UPDATE projects SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(change.toStatus, change.itemId);
+          db.prepare('INSERT INTO history (project_id, user, action, details) VALUES (?, ?, ?, ?)').run(change.itemId, user, 'status_change', `Moved to ${change.toStatus} via Builder Mode`);
+        } else {
+          db.prepare('UPDATE subtasks SET status = ?, completed_at = ? WHERE id = ?').run(change.toStatus, change.toStatus === 'done' ? new Date().toISOString() : null, change.itemId);
+        }
+        db.prepare('INSERT INTO activity_log (user, message) VALUES (?, ?)').run(user, `Builder Mode: Moved "${change.itemName}" to ${change.toStatus}`);
+        results.push({ success: true, change });
+      } else if (change.type === 'create' && change.itemType === 'subtask') {
+        // Create new subtask
+        const result = db.prepare(`
+          INSERT INTO subtasks (project_id, name, description, status, assignee, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(change.projectId, change.itemName, change.description || '', change.toStatus || 'todo', user, new Date().toISOString());
+        
+        db.prepare('INSERT INTO activity_log (user, message) VALUES (?, ?)').run(user, `Builder Mode: Created new task "${change.itemName}"`);
+        results.push({ success: true, change, newId: result.lastInsertRowid });
+      }
+    } catch (err) {
+      console.error('Error applying change:', err);
+      results.push({ success: false, change, error: err.message });
+    }
+  }
+  
+  res.json({ results });
+});
+
 // ANALYTICS FOCUS AREAS - AI Generated
 app.get('/api/analytics/focus-areas', async (req, res) => {
   const projects = db.prepare('SELECT * FROM projects').all();
