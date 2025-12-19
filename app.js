@@ -128,45 +128,30 @@ async function renderAllCards() {
     ['todo', 'inprogress', 'review', 'done'].forEach(status => {
         renderColumn(status);
     });
-    updateCounts();
+    
+    // Reapply any active filters
+    filterCards();
 }
-
-const CARDS_PER_COLUMN = 10;
-const expandedColumns = { todo: false, inprogress: false, review: false, done: false };
 
 function renderColumn(status) {
     const container = document.getElementById(status);
     const statusProjects = projects.filter(p => p.status === status);
     const statusSubtasks = allSubtasks.filter(s => s.status === status);
     
-    // Combine all cards
+    // Combine all cards - show all, rely on filtering
     const allCards = [
         ...statusProjects.map(p => ({ type: 'project', data: p })),
         ...statusSubtasks.map(s => ({ type: 'subtask', data: s }))
     ];
     
-    const totalCount = allCards.length;
-    const isExpanded = expandedColumns[status];
-    const visibleCards = isExpanded ? allCards : allCards.slice(0, CARDS_PER_COLUMN);
-    const hiddenCount = totalCount - CARDS_PER_COLUMN;
-    
-    // Render visible cards
-    let html = visibleCards.map(card => {
+    // Render all cards
+    const html = allCards.map(card => {
         if (card.type === 'project') {
             return createCardHTML(card.data);
         } else {
             return createSubtaskCardHTML(card.data);
         }
     }).join('');
-    
-    // Add expand/collapse button if needed
-    if (totalCount > CARDS_PER_COLUMN) {
-        if (isExpanded) {
-            html += `<button class="expand-btn" onclick="toggleColumnExpand('${status}')">Show Less ▲</button>`;
-        } else {
-            html += `<button class="expand-btn" onclick="toggleColumnExpand('${status}')">Show ${hiddenCount} More ▼</button>`;
-        }
-    }
     
     container.innerHTML = html;
     
@@ -182,12 +167,6 @@ function renderColumn(status) {
         card.addEventListener('dragend', dragEnd);
     });
 }
-
-function toggleColumnExpand(status) {
-    expandedColumns[status] = !expandedColumns[status];
-    renderColumn(status);
-}
-
 function createCardHTML(project) {
     const isOverdue = project.due_date && new Date(project.due_date) < new Date();
     const tags = Array.isArray(project.tags) ? project.tags : [];
@@ -905,18 +884,23 @@ function filterCards() {
         card.classList.toggle('hidden', !(matchesProject && matchesOwner && matchesPriority));
     });
     
-    // Filter subtask cards
+    // Filter subtask cards - show subtasks belonging to matching projects
     document.querySelectorAll('.subtask-card').forEach(card => {
-        const projectId = parseInt(card.dataset.projectId);
-        const project = projects.find(p => p.id === projectId);
+        const subtaskProjectId = parseInt(card.dataset.projectId);
+        const parentProject = projects.find(p => p.id === subtaskProjectId);
         
-        if (!project) return;
+        if (!parentProject) {
+            card.classList.add('hidden');
+            return;
+        }
         
-        const matchesProject = !projectFilter || projectId === parseInt(projectFilter);
-        const matchesOwner = !ownerFilter || project.owner === ownerFilter;
-        const matchesPriority = !priorityFilter || project.priority === priorityFilter;
+        // Subtask matches if its parent project matches the filters
+        const matchesProject = !projectFilter || subtaskProjectId === parseInt(projectFilter);
+        const matchesOwner = !ownerFilter || parentProject.owner === ownerFilter;
+        const matchesPriority = !priorityFilter || parentProject.priority === priorityFilter;
         
-        card.classList.toggle('hidden', !(matchesProject && matchesOwner && matchesPriority));
+        const shouldShow = matchesProject && matchesOwner && matchesPriority;
+        card.classList.toggle('hidden', !shouldShow);
     });
     
     // Update column counts based on visible cards
