@@ -55,8 +55,8 @@
         </div>
 
         <!-- AI Insights Sidebar -->
-        <button class="insights-toggle" id="insightsToggle" onclick="toggleInsightsSidebar()">💡</button>
-        <div class="insights-sidebar" id="insightsSidebar">
+        <button class="insights-toggle collapsed" id="insightsToggle" onclick="toggleInsightsSidebar()">💡</button>
+        <div class="insights-sidebar collapsed" id="insightsSidebar">
             <div class="insights-header">
                 <h3>✨ AI Insights</h3>
                 <button class="insights-refresh" onclick="refreshInsights()" title="Refresh">🔄</button>
@@ -549,7 +549,7 @@
                 <span id="aiToggle" onclick="toggleAiChat()">▼</span>
             </div>
         </div>
-        <div class="ai-body" id="aiBody">
+        <div class="ai-body collapsed" id="aiBody">
             <div class="ai-messages" id="aiMessages"></div>
             <div class="ai-examples" id="aiExamples">
                 <div class="ai-examples-label">Try asking:</div>
