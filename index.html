@@ -273,13 +273,36 @@
                             </div>
                         </div>
                         
-                        <div class="builder-update">
+                        <!-- Mode Toggle -->
+                        <div class="builder-mode-toggle">
+                            <button class="mode-btn active" id="modeSimple" onclick="setBuilderMode('simple')">💬 Quick Update</button>
+                            <button class="mode-btn" id="modeBulk" onclick="setBuilderMode('bulk')">📋 Bulk Import</button>
+                        </div>
+                        
+                        <!-- Simple Update Mode -->
+                        <div class="builder-update" id="simpleMode">
                             <h3>💬 What are you doing?</h3>
                             <textarea id="builderInput" rows="4" placeholder="Example: Just finished the API integration for the USCIS project. Moving on to testing now. Also completed the documentation for State Dept."></textarea>
                             <button class="btn btn-primary btn-full" onclick="analyzeBuilderUpdate()">🤖 Analyze & Suggest Changes</button>
                         </div>
                         
-                        <div class="builder-quick-actions">
+                        <!-- Bulk Import Mode -->
+                        <div class="builder-bulk" id="bulkMode" style="display: none;">
+                            <h3>📋 Paste Progress Report</h3>
+                            <p class="bulk-hint">Paste a structured progress update, status table, or accomplishments list. The AI will parse it and create/update all tasks.</p>
+                            <textarea id="bulderBulkInput" rows="12" placeholder="Paste your progress report here...
+
+Example format:
+🏛️ Drafting Engine
+DONE - LCD Page View Preview: Pixel-perfect 8.5&quot; x 11&quot; simulation
+DONE - Template Engine v1.0: Dynamic logic for Amendment generation
+IN PROGRESS - Entity Database: Building the repository of recurring Clients
+
+Or any structured format - the AI will figure it out!"></textarea>
+                            <button class="btn btn-primary btn-full" onclick="analyzeBulkImport()">🤖 Parse & Generate Tasks</button>
+                        </div>
+                        
+                        <div class="builder-quick-actions" id="quickActionsSection">
                             <h3>⚡ Quick Updates</h3>
                             <div class="quick-action-buttons">
                                 <button class="btn btn-secondary" onclick="quickBuilderAction('started')">Started working on this</button>

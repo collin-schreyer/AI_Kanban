@@ -1109,6 +1109,88 @@ Example: [
   }
 });
 
+// BUILDER MODE - Bulk Import
+app.post('/api/builder/bulk-import', async (req, res) => {
+  const { projectId, bulkText } = req.body;
+  
+  const projects = db.prepare('SELECT * FROM projects').all();
+  const allSubtasks = db.prepare('SELECT * FROM subtasks').all();
+  
+  let projectContext = '';
+  if (projectId) {
+    const project = projects.find(p => p.id === parseInt(projectId));
+    const existingSubtasks = allSubtasks.filter(s => s.project_id === parseInt(projectId));
+    projectContext = `Target Project: ${project?.name} (ID: ${projectId})
+Existing subtasks: ${existingSubtasks.map(s => s.name).join(', ')}`;
+  }
+
+  const systemPrompt = `You are parsing a progress report or status update to extract tasks for a Kanban board.
+
+${projectContext}
+
+USER'S PROGRESS REPORT:
+"""
+${bulkText}
+"""
+
+Parse this report and extract ALL tasks mentioned. For each task, determine:
+1. The task name (concise but descriptive)
+2. A brief description
+3. The status: "done", "inprogress", "review", or "todo"
+   - DONE/COMPLETE/FINISHED = "done"
+   - ONGOING/IN PROGRESS/WORKING ON = "inprogress"
+   - REVIEW/PENDING REVIEW = "review"
+   - BACKLOG/TODO/FUTURE/NEXT/ROADMAP = "todo"
+
+Return a JSON array of task objects:
+[
+  {
+    "type": "create",
+    "itemType": "subtask",
+    "itemId": null,
+    "itemName": "Task Name",
+    "description": "Brief description of the task",
+    "projectId": ${projectId || 'null'},
+    "toStatus": "done|inprogress|review|todo",
+    "reason": "Extracted from [section name]"
+  }
+]
+
+IMPORTANT:
+- Extract EVERY task mentioned, even if briefly
+- Use the exact task names from the report when possible
+- Include descriptions when provided
+- Map status words correctly (DONE→done, ONGOING→inprogress, BACKLOG→todo)
+- If a section header indicates a category, note it in the reason
+
+Return ONLY valid JSON array.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: 'Parse and extract all tasks' }
+      ],
+      max_tokens: 2000
+    });
+    
+    let suggestions;
+    try {
+      const content = completion.choices[0].message.content.replace(/```json\n?|\n?```/g, '').trim();
+      suggestions = JSON.parse(content);
+    } catch (e) {
+      console.error('JSON parse error:', e);
+      suggestions = [];
+    }
+    
+    res.json({ suggestions });
+  } catch (error) {
+    console.error('OpenAI error:', error);
+    res.json({ suggestions: [], error: 'AI parsing failed' });
+  }
+});
+
 // BUILDER MODE - Apply Changes
 app.post('/api/builder/apply', async (req, res) => {
   const { changes, user } = req.body;

@@ -2767,3 +2767,118 @@ function renderBuilderHistory() {
         </div>
     `).join('');
 }
+
+
+// Builder Mode Toggle
+function setBuilderMode(mode) {
+    document.getElementById('modeSimple').classList.toggle('active', mode === 'simple');
+    document.getElementById('modeBulk').classList.toggle('active', mode === 'bulk');
+    document.getElementById('simpleMode').style.display = mode === 'simple' ? 'block' : 'none';
+    document.getElementById('bulkMode').style.display = mode === 'bulk' ? 'block' : 'none';
+    document.getElementById('quickActionsSection').style.display = mode === 'simple' ? 'block' : 'none';
+}
+
+async function analyzeBulkImport() {
+    const projectId = document.getElementById('builderProject').value;
+    const bulkText = document.getElementById('bulderBulkInput').value.trim();
+    
+    if (!bulkText) {
+        showToast('Please paste a progress report to import', 'error');
+        return;
+    }
+    
+    if (!projectId) {
+        showToast('Please select a project first', 'error');
+        return;
+    }
+    
+    const suggestionsDiv = document.getElementById('builderSuggestions');
+    suggestionsDiv.innerHTML = `
+        <div class="builder-loading">
+            <div class="spinner"></div>
+            <p>🤖 Parsing your progress report...</p>
+            <p style="font-size: 0.85rem; color: rgba(255,255,255,0.5); margin-top: 10px;">Extracting tasks and determining statuses...</p>
+        </div>`;
+    
+    try {
+        const res = await fetch(`${API_URL}/builder/bulk-import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectId, bulkText })
+        });
+        
+        const data = await res.json();
+        pendingSuggestions = data.suggestions || [];
+        
+        if (pendingSuggestions.length === 0) {
+            suggestionsDiv.innerHTML = `
+                <div class="builder-empty">
+                    <div class="builder-empty-icon">🤔</div>
+                    <p>Couldn't extract any tasks. Try a clearer format with status indicators like DONE, IN PROGRESS, TODO.</p>
+                </div>`;
+            return;
+        }
+        
+        renderBulkSuggestions();
+    } catch (err) {
+        console.error('Bulk import failed:', err);
+        suggestionsDiv.innerHTML = `
+            <div class="builder-empty">
+                <div class="builder-empty-icon">⚠️</div>
+                <p>Failed to parse. Please try again.</p>
+            </div>`;
+    }
+}
+
+function renderBulkSuggestions() {
+    const suggestionsDiv = document.getElementById('builderSuggestions');
+    const actionsDiv = document.getElementById('builderActions');
+    
+    // Group by status for better visualization
+    const byStatus = { done: [], inprogress: [], review: [], todo: [] };
+    pendingSuggestions.forEach((s, i) => {
+        s.originalIndex = i;
+        if (byStatus[s.toStatus]) {
+            byStatus[s.toStatus].push(s);
+        } else {
+            byStatus.todo.push(s);
+        }
+    });
+    
+    const statusLabels = {
+        done: '✅ Done',
+        inprogress: '🔄 In Progress',
+        review: '👀 Review',
+        todo: '📋 To Do'
+    };
+    
+    let html = `<div class="bulk-summary">Found <strong>${pendingSuggestions.length}</strong> tasks to create</div>`;
+    
+    for (const [status, items] of Object.entries(byStatus)) {
+        if (items.length === 0) continue;
+        
+        html += `<div class="bulk-status-group">
+            <div class="bulk-status-header">${statusLabels[status]} (${items.length})</div>`;
+        
+        items.forEach(s => {
+            html += `
+                <div class="suggestion-card" id="suggestion-${s.originalIndex}" data-index="${s.originalIndex}">
+                    <div class="suggestion-header">
+                        <span class="suggestion-type create">+ new</span>
+                        <div class="suggestion-actions">
+                            <button onclick="rejectSuggestion(${s.originalIndex})" title="Remove">❌</button>
+                        </div>
+                    </div>
+                    <div class="suggestion-content">
+                        <div class="suggestion-title">${s.itemName}</div>
+                        ${s.description ? `<div class="suggestion-description">${s.description}</div>` : ''}
+                    </div>
+                </div>`;
+        });
+        
+        html += '</div>';
+    }
+    
+    suggestionsDiv.innerHTML = html;
+    actionsDiv.style.display = 'flex';
+}
