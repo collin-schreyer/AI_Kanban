@@ -1263,6 +1263,60 @@ Be OPTIMISTIC and BRIEF. Celebrate progress. Max 15 words per insight.`;
   }
 });
 
+// ADMIN: One-time data migration endpoint (remove after use)
+app.post('/api/admin/seed-legal-ai', (req, res) => {
+  const { secret } = req.body;
+  if (secret !== 'ba-admin-2024') {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  try {
+    // Get Legal AI project ID
+    const project = db.prepare("SELECT id FROM projects WHERE name LIKE '%Legal AI%'").get();
+    if (!project) {
+      return res.json({ error: 'Legal AI project not found' });
+    }
+    
+    // Clear existing subtasks
+    db.prepare('DELETE FROM subtasks WHERE project_id = ?').run(project.id);
+    
+    // Insert new subtasks
+    const insertSubtask = db.prepare('INSERT INTO subtasks (project_id, name, description, status, assignee) VALUES (?, ?, ?, ?, ?)');
+    
+    const subtasks = [
+      ['LCD Page View Preview', 'Pixel-perfect 8.5" x 11" simulation with legal margins (0.5" top / 1.0" side)', 'done'],
+      ['Template Engine v1.0', 'Dynamic logic for Amendment generation, including conditional f/k/a phrasing', 'done'],
+      ['Legal Date Utility', 'Conversion of ISO dates to professional ordinal phrasing (e.g., 17th day of January)', 'done'],
+      ['Advanced Layout Support', 'Automation of hanging indents for clauses and dual-column signature blocks', 'done'],
+      ['Firm Branding', 'Hard-coded B&A logo integration into document headers at a refined 0.75" scale', 'done'],
+      ['Professional Word Export', 'Direct patching of drafted data into standard .docx files for final delivery', 'done'],
+      ['SLA Tracking Dashboard', 'Real-time monitoring of contract turnaround times and compliance milestones', 'done'],
+      ['Persistence Layer', 'Full SQLite/Drizzle ORM implementation for Verified System of Record storage', 'done'],
+      ['Deal Metric Ingestion', 'Automated field extraction into structured deal summaries and analytics views', 'done'],
+      ['Entity Database', 'Building the repository of recurring Clients/Consultants for pre-filling', 'inprogress'],
+      ['Dual-Pane Ingestion', 'Support for both file uploads (PDF/DOCX) and direct Paste Text comparisons', 'done'],
+      ['Word-Level Redlining', 'Granular diff engine that highlights specific word swaps rather than just line changes', 'done'],
+      ['Comparison Export', 'The ability to export the Compare View result into a structured review document', 'done'],
+      ['AI Clause Recommender', 'Suggesting standard B&A boilerplate swaps during the comparison phase', 'todo'],
+      ['NDA/Teaming/MSA Templates', 'Adding NDAs, Teaming Agreements, and MSAs to the Drafting Library', 'todo'],
+      ['Smart Pre-fill Integration', 'Connecting the Drafting Engine to the Entity Database to eliminate manual data entry', 'todo'],
+      ['User Profiles', 'Saving preferred signatories and titles to further speed up the workflow', 'todo']
+    ];
+    
+    subtasks.forEach(([name, desc, status]) => {
+      insertSubtask.run(project.id, name, desc, status, 'Collin');
+    });
+    
+    // Update project status
+    db.prepare("UPDATE projects SET status = 'inprogress' WHERE id = ?").run(project.id);
+    
+    res.json({ success: true, message: `Added ${subtasks.length} subtasks to Legal AI Assistant` });
+  } catch (err) {
+    console.error('Admin seed error:', err);
+    res.json({ error: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
